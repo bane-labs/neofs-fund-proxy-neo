@@ -1,56 +1,54 @@
 package axlabs.com.neofsfundproxy;
 
-import io.neow3j.contract.ContractManagement;
 import io.neow3j.contract.NefFile;
 import io.neow3j.contract.SmartContract;
 import io.neow3j.protocol.Neow3j;
+import io.neow3j.protocol.core.response.ContractManifest;
 import io.neow3j.protocol.core.response.NeoApplicationLog;
 import io.neow3j.protocol.core.response.NeoSendRawTransaction;
-import io.neow3j.protocol.core.response.ContractManifest;
 import io.neow3j.protocol.http.HttpService;
 import io.neow3j.transaction.AccountSigner;
 import io.neow3j.transaction.TransactionBuilder;
+import io.neow3j.types.ContractParameter;
 import io.neow3j.types.Hash160;
 import io.neow3j.types.Hash256;
 import io.neow3j.types.NeoVMStateType;
 import io.neow3j.wallet.Account;
 import io.neow3j.wallet.Wallet;
+import io.github.cdimascio.dotenv.Dotenv;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 
 /**
- * Deployment script for NeoFSFundProxy contract.
- *
+ * Upgrade script for NeoFSFundProxy contract.
+ * <p>
+ * Calls the contract's {@code upgrade(nef, manifest, data)} method on the already-deployed
+ * contract. The caller must be the current contract owner (enforced by {@code onlyOwner()}).
+ * <p>
  * Configuration can be provided in three ways (in order of precedence):
- * 1. System properties (-Pkey=value)
+ * 1. System properties (-Pkey=value passed to Gradle)
  * 2. Environment variables
  * 3. .env file in the project root
- *
+ * <p>
  * Usage:
- *   ./gradlew deploy -Powner=<owner_address> -PneofsContract=<neofs_contract_address> -PmessageBridge=<message_bridge_address> [-PnativeBridge=<native_bridge_address>] [-PwalletPath=<wallet_path>] [-PwalletPassword=<wallet_password>] [-PrpcUrl=<rpc_url>] [-PdryRun=true]
- *
+ *   ./gradlew upgrade -PcontractHash=<deployed_contract_hash> [-PwalletPath=<wallet_path>] [-PwalletPassword=<wallet_password>] [-PrpcUrl=<rpc_url>] [-PdryRun=true]
+ * <p>
  * Or create a .env file with:
- *   N3_OWNER_ADDRESS=<owner_address>
- *   N3_NEOFS_CONTRACT=<neofs_contract_address>
- *   N3_MESSAGE_BRIDGE=<message_bridge_address>
- *   N3_NATIVE_BRIDGE=<native_bridge_address>  # Optional
- *   WALLET_FILEPATH_DEPLOYER=<wallet_path>
- *   WALLET_PASSWORD_DEPLOYER=<wallet_password>  # Optional
- *   N3_JSON_RPC=<rpc_url>  # Optional, defaults to http://localhost:40332
- *   N3_HASH_FILE=<hash_file_path>  # Optional
- *   DRY_RUN=true  # Optional, if set to true, transaction will not be submitted
- *
- * Then run: ./gradlew deploy
+ *   N3_CONTRACT_HASH=<deployed_contract_hash>   # Required
+ *   WALLET_FILEPATH_DEPLOYER=<wallet_path>       # Required
+ *   WALLET_PASSWORD_DEPLOYER=<wallet_password>   # Optional
+ *   N3_JSON_RPC=<rpc_url>                        # Optional, defaults to http://localhost:40332
+ *   DRY_RUN=true                                 # Optional
+ * <p>
+ * Then run: ./gradlew upgrade
  */
-public class DeployNeoFSFundProxy {
+public class UpgradeNeoFSFundProxy {
 
-    private static final Logger logger = LoggerFactory.getLogger(DeployNeoFSFundProxy.class);
+    private static final Logger logger = LoggerFactory.getLogger(UpgradeNeoFSFundProxy.class);
     private static final String DEFAULT_RPC_URL = "http://localhost:40332";
     private static Dotenv dotenv = null;
 
@@ -71,31 +69,22 @@ public class DeployNeoFSFundProxy {
         }
 
         // Get configuration from system properties, environment variables, or .env file
-        String ownerAddress = getConfig("owner", "N3_OWNER_ADDRESS", true);
-        String neofsContract = getConfig("neofsContract", "N3_NEOFS_CONTRACT", true);
-        String messageBridge = getConfig("messageBridge", "N3_MESSAGE_BRIDGE", true);
-        String nativeBridge = getConfig("nativeBridge", "N3_NATIVE_BRIDGE", false);
+        String contractHashStr = getConfig("contractHash", "N3_CONTRACT_HASH", true);
         String walletPath = getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
         String walletPassword = getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
         String rpcUrl = getConfig("rpcUrl", "N3_JSON_RPC", false);
         if (rpcUrl == null || rpcUrl.isEmpty()) {
             rpcUrl = DEFAULT_RPC_URL;
         }
-        String hashFile = getConfig("hashFile", "N3_HASH_FILE", false);
         String dryRunStr = getConfig("dryRun", "DRY_RUN", false);
         boolean dryRun = dryRunStr != null && (dryRunStr.equalsIgnoreCase("true") || dryRunStr.equals("1"));
 
         if (dryRun) {
             logger.info("=== DRY RUN MODE - Transaction will NOT be submitted ===");
         }
-        logger.info("Deploying NeoFSFundProxy contract...");
-        logger.info("RPC URL: {}", rpcUrl);
-        logger.info("Owner: {}", ownerAddress);
-        logger.info("NeoFS Contract: {}", neofsContract);
-        logger.info("Message Bridge: {}", messageBridge);
-        if (nativeBridge != null && !nativeBridge.isEmpty()) {
-            logger.info("Native Bridge: {}", nativeBridge);
-        }
+        logger.info("Upgrading NeoFSFundProxy contract...");
+        logger.info("RPC URL:         {}", rpcUrl);
+        logger.info("Contract Hash:   {}", contractHashStr);
 
         // Connect to Neo3 network
         Neow3j neow3j = Neow3j.build(new HttpService(rpcUrl));
@@ -105,7 +94,7 @@ public class DeployNeoFSFundProxy {
         String password = walletPassword != null ? walletPassword : "";
         wallet.decryptAllAccounts(password);
         Account account = wallet.getDefaultAccount();
-        logger.info("Deployer account: {}", account.getAddress());
+        logger.info("Owner account:   {}", account.getAddress());
 
         // Load compiled contract files
         String buildDir = "build/neow3j";
@@ -117,73 +106,46 @@ public class DeployNeoFSFundProxy {
         }
 
         NefFile nef = NefFile.readFromFile(nefFile);
-        // Parse manifest using Jackson ObjectMapper from Wallet
         String manifestJson = new String(Files.readAllBytes(manifestFile.toPath()));
+        // Validate the manifest can be parsed
         ContractManifest manifest = Wallet.OBJECT_MAPPER.readValue(manifestJson, ContractManifest.class);
 
-        // Parse addresses/hashes (both Neo3 address format and raw script hash are accepted)
-        Hash160 owner = parseHash160(ownerAddress);
-        Hash160 neofsContractHash = parseHash160(neofsContract);
-        Hash160 messageBridgeHash = parseHash160(messageBridge);
-        Hash160 nativeBridgeHash = null;
-        if (nativeBridge != null && !nativeBridge.isEmpty()) {
-            nativeBridgeHash = parseHash160(nativeBridge);
-        }
+        logger.info("NEF loaded:      {} bytes", nef.toArray().length);
+        logger.info("Manifest name:   {}", manifest.getName());
 
-        // Create deployment data struct
-        // The DeploymentData struct has 4 Hash160 fields: owner, nativeBridge, neofsContract, messageBridge
-        io.neow3j.types.ContractParameter deploymentData = io.neow3j.types.ContractParameter.array(
-                io.neow3j.types.ContractParameter.hash160(owner),
-                io.neow3j.types.ContractParameter.hash160(nativeBridgeHash != null ? nativeBridgeHash : Hash160.ZERO),
-                io.neow3j.types.ContractParameter.hash160(neofsContractHash),
-                io.neow3j.types.ContractParameter.hash160(messageBridgeHash)
-        );
+        // Parse deployed contract hash (accepts Neo3 address or raw hex script hash)
+        Hash160 contractHash = parseHash160(contractHashStr);
 
-        // Build deployment transaction using ContractManagement.
-        // AccountSigner.global is required because checkWitness() is called inside the
-        // @OnDeployment callback, which is invoked by ContractManagement (two call levels
-        // deep from the entry script). calledByEntry would not cover that depth.
-        TransactionBuilder builder = new ContractManagement(neow3j)
-                .deploy(nef, manifest, deploymentData)
-                .signers(AccountSigner.global(account));
-
-        // Calculate contract hash from sender, nef checksum, and manifest name
-        Hash160 contractHash = SmartContract.calcContractHash(
-                account.getScriptHash(),
-                nef.getCheckSumAsInteger(),
-                manifest.getName()
-        );
-
-        logger.info("Contract Hash (calculated): {}", contractHash);
-        logger.info("Contract Address (calculated): {}", contractHash.toAddress());
+        // Build the upgrade invocation:
+        // upgrade(ByteString nef, String manifest, Object data)
+        TransactionBuilder builder = new SmartContract(contractHash, neow3j)
+                .invokeFunction("upgrade",
+                        ContractParameter.byteArray(nef.toArray()),
+                        ContractParameter.string(manifestJson),
+                        ContractParameter.any(null))
+                .signers(AccountSigner.calledByEntry(account));
 
         if (dryRun) {
             logger.info("");
             logger.info("=== DRY RUN COMPLETE ===");
             logger.info("Transaction was prepared but NOT submitted to the network.");
-            logger.info("Contract Hash: {}", contractHash);
-            logger.info("Contract Address: {}", contractHash.toAddress());
+            logger.info("Contract Hash:   {}", contractHash);
+            logger.info("Contract Address:{}", contractHash.toAddress());
             logger.info("");
-            logger.info("To actually deploy, run without -PdryRun=true or set DRY_RUN=false");
-
-            // Save contract hash to file if specified (even in dry run)
-            if (hashFile != null && !hashFile.isEmpty()) {
-                Files.write(Paths.get(hashFile), contractHash.toString().getBytes());
-                logger.info("Contract hash saved to: {}", hashFile);
-            }
+            logger.info("To actually upgrade, run without -PdryRun=true or set DRY_RUN=false");
             return;
         }
 
         // Sign and send transaction
-        logger.info("Signing and sending deployment transaction...");
+        logger.info("Signing and sending upgrade transaction...");
         io.neow3j.transaction.Transaction tx = builder.sign();
         NeoSendRawTransaction response = tx.send();
         if (response.hasError()) {
-            throw new RuntimeException("Failed to send deployment transaction: " + response.getError().getMessage());
+            throw new RuntimeException("Failed to send upgrade transaction: " + response.getError().getMessage());
         }
 
         Hash256 txHash = tx.getTxId();
-        logger.info("Deployment transaction sent: {}", txHash);
+        logger.info("Upgrade transaction sent: {}", txHash);
 
         // Wait for transaction to be included in a block.
         // getTransaction returns the TX from the mempool before it is mined, but
@@ -215,14 +177,14 @@ public class DeployNeoFSFundProxy {
             if (execution.getState() == NeoVMStateType.FAULT) {
                 String error = execution.getException() != null ? execution.getException() : "Unknown error";
                 logger.info("");
-                logger.info("=== DEPLOYMENT FAILED ===");
+                logger.info("=== UPGRADE FAILED ===");
                 logger.info("TX Hash:    {}", txHash);
                 logger.info("VM State:   {}", execution.getState());
                 logger.info("Exception:  {}", error);
-                throw new RuntimeException("Deployment failed: " + error);
+                throw new RuntimeException("Upgrade failed: " + error);
             }
             logger.info("");
-            logger.info("=== DEPLOYMENT SUCCESSFUL ===");
+            logger.info("=== UPGRADE SUCCESSFUL ===");
             logger.info("TX Hash:         {}", txHash);
             logger.info("VM State:        {}", execution.getState());
             long gasConsumedRaw = Long.parseLong(execution.getGasConsumed());
@@ -231,16 +193,10 @@ public class DeployNeoFSFundProxy {
             logger.info("Contract Address:{}", contractHash.toAddress());
         } else {
             logger.info("");
-            logger.info("=== DEPLOYMENT SUCCESSFUL ===");
+            logger.info("=== UPGRADE SUCCESSFUL ===");
             logger.info("TX Hash:         {}", txHash);
             logger.info("Contract Hash:   {}", contractHash);
             logger.info("Contract Address:{}", contractHash.toAddress());
-        }
-
-        // Save contract hash to file if specified
-        if (hashFile != null && !hashFile.isEmpty()) {
-            Files.write(Paths.get(hashFile), contractHash.toString().getBytes());
-            logger.info("Contract hash saved to: {}", hashFile);
         }
     }
 

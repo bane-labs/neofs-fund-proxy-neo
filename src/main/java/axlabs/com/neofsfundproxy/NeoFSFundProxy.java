@@ -7,12 +7,14 @@ import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
 import io.neow3j.devpack.annotations.CallFlags;
 import io.neow3j.devpack.annotations.DisplayName;
+import io.neow3j.devpack.annotations.EventParameterNames;
 import io.neow3j.devpack.annotations.ManifestExtra;
 import io.neow3j.devpack.annotations.OnDeployment;
 import io.neow3j.devpack.annotations.OnNEP17Payment;
 import io.neow3j.devpack.annotations.Permission;
 import io.neow3j.devpack.annotations.Safe;
 import io.neow3j.devpack.annotations.Struct;
+import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.contracts.ContractInterface;
 import io.neow3j.devpack.contracts.GasToken;
 import io.neow3j.devpack.contracts.ContractManagement;
@@ -43,6 +45,17 @@ public class NeoFSFundProxy {
     public static final GasToken gasToken = new GasToken();
 
     /**
+     * Fired at the end of a successful {@link #fundNeoFS} call.
+     *
+     * @param beneficiary The beneficiary address passed to fundNeoFS
+     * @param amount      The amount of GAS (in fractions, 10^-8) that was transferred to NeoFS
+     * @param requestId   The request ID returned by fundNeoFS
+     */
+    @DisplayName("NeoFSFunded")
+    @EventParameterNames({"beneficiary", "amount", "requestId"})
+    private static Event3Args<Hash160, Integer, Integer> onNeoFSFunded;
+
+    /**
      * Deployment data struct
      */
     @Struct
@@ -56,10 +69,12 @@ public class NeoFSFundProxy {
     /**
      * Funds NeoFS by claiming tokens from bridge and transferring contract balance.
      * Only the message bridge can call this method.
-     * 
-     * @param beneficiary The beneficiary address (unused, kept for compatibility)
-     * @param nonce The nonce for claiming from bridge
-     * @param requestId The request ID (unused, kept for compatibility)
+     * Fires a {@code NeoFSFunded} event on completion containing the beneficiary,
+     * the GAS amount transferred, and the request ID.
+     *
+     * @param beneficiary The beneficiary address forwarded as transfer data to the NeoFS contract
+     * @param nonce       The nonce for claiming from the native bridge
+     * @param requestId   The request ID returned at the end of the call
      * @return The request ID
      */
     public static int fundNeoFS(
@@ -91,6 +106,8 @@ public class NeoFSFundProxy {
             }
         }
 
+        onNeoFSFunded.fire(beneficiary, balance, requestId);
+
         return requestId;
     }
 
@@ -111,7 +128,8 @@ public class NeoFSFundProxy {
      * Deploy function called automatically when contract is deployed.
      * Sets the owner, native bridge, and NeoFS contract during initial deployment.
      * 
-     * @param data Deployment data. Should be a DeploymentData struct with owner, nativeBridge, and neofsContract.
+     * @param data Deployment data. Must be a {@link DeploymentData} struct with owner, nativeBridge,
+     *             neofsContract, and messageBridge fields (in that order).
      * @param isUpdate Whether this is an update (true) or initial deployment (false)
      */
     @OnDeployment

@@ -18,6 +18,8 @@ repositories {
 
 sourceSets {
     deploy {
+        java.srcDirs = ['src/deploy/java']
+        resources.srcDirs = ['src/deploy/resources']
         compileClasspath += sourceSets.main.output
         runtimeClasspath += sourceSets.main.output
     }
@@ -36,7 +38,8 @@ dependencies {
     deployImplementation 'io.neow3j:compiler:3.24.0',
             'io.neow3j:devpack:3.24.0',
             'io.neow3j:contract:3.24.0',
-            'ch.qos.logback:logback-classic:1.2.11',
+            'com.google.code.gson:gson:2.10.1',
+            'ch.qos.logback:logback-classic:1.4.14',
             'io.github.cdimascio:dotenv-java:3.0.0'
 }
 
@@ -64,15 +67,32 @@ tasks.named('run', JavaExec) {
 task deploy(type: JavaExec) {
     description = 'Deploy the NeoFSFundProxy contract with deployment data'
     group = 'deployment'
-    
+
     dependsOn 'neow3jCompile'
-    
+
     classpath = sourceSets.deploy.runtimeClasspath
     mainClass = 'axlabs.com.neofsfundproxy.DeployNeoFSFundProxy'
-    
+
     // Pass through system properties
     systemProperties System.getProperties()
-    
+
+    // Pass through environment variables
+    environment System.getenv()
+}
+
+// Upgrade task for NeoFSFundProxy contract
+task upgrade(type: JavaExec) {
+    description = 'Upgrade the already-deployed NeoFSFundProxy contract (requires -PcontractHash=<hash>)'
+    group = 'deployment'
+
+    dependsOn 'neow3jCompile'
+
+    classpath = sourceSets.deploy.runtimeClasspath
+    mainClass = 'axlabs.com.neofsfundproxy.UpgradeNeoFSFundProxy'
+
+    // Pass through system properties
+    systemProperties System.getProperties()
+
     // Pass through environment variables
     environment System.getenv()
 }
