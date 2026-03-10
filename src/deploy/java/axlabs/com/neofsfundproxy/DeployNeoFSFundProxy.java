@@ -33,13 +33,15 @@ import java.nio.file.Paths;
  * 3. .env file in the project root
  *
  * Usage:
- *   ./gradlew deploy -Powner=<owner_address> -PneofsContract=<neofs_contract_address> -PmessageBridge=<message_bridge_address> [-PnativeBridge=<native_bridge_address>] [-PwalletPath=<wallet_path>] [-PwalletPassword=<wallet_password>] [-PrpcUrl=<rpc_url>] [-PdryRun=true]
+ *   ./gradlew deploy -Powner=<owner> -PneofsContract=<hash> -PmessageBridge=<hash> -PexecutionManager=<hash> [-PnativeBridge=<hash>] [-PevmProxyContract=<evm_20_byte_address>] [-PwalletPath=...] [-PwalletPassword=...] [-PrpcUrl=...] [-PdryRun=true]
  *
  * Or create a .env file with:
  *   N3_OWNER_ADDRESS=<owner_address>
  *   N3_NEOFS_CONTRACT=<neofs_contract_address>
  *   N3_MESSAGE_BRIDGE=<message_bridge_address>
+ *   N3_EXECUTION_MANAGER=<execution_manager_contract_address>  # Required
  *   N3_NATIVE_BRIDGE=<native_bridge_address>  # Optional
+ *   N3_EVM_PROXY_CONTRACT=<evm_proxy_20_byte_hex>  # Optional; can be set later via setEvmProxyContract
  *   WALLET_FILEPATH_DEPLOYER=<wallet_path>
  *   WALLET_PASSWORD_DEPLOYER=<wallet_password>  # Optional
  *   N3_JSON_RPC=<rpc_url>  # Optional, defaults to http://localhost:40332
@@ -55,26 +57,34 @@ public class DeployNeoFSFundProxy {
     private static Dotenv dotenv = null;
 
     public static void main(String[] args) throws Throwable {
-        // Load .env file if it exists (silently ignore if it doesn't)
+        // Load .env file from current working directory (project root when run via Gradle with workingDir = projectDir)
         try {
             File envFile = new File(".env");
+            if (!envFile.isAbsolute()) {
+                String cwd = System.getProperty("user.dir");
+                envFile = new File(cwd, ".env");
+            }
             if (envFile.exists()) {
                 dotenv = Dotenv.configure()
-                        .directory(".")
+                        .directory(envFile.getParentFile().getAbsolutePath())
                         .filename(".env")
                         .ignoreIfMissing()
                         .load();
-                logger.info("Loaded configuration from .env file");
+                logger.info("Loaded configuration from .env file at {}", envFile.getAbsolutePath());
+            } else {
+                logger.debug(".env not found at {} (user.dir={})", envFile.getAbsolutePath(), System.getProperty("user.dir"));
             }
         } catch (Exception e) {
-            logger.debug("Could not load .env file: {}", e.getMessage());
+            logger.warn("Could not load .env file: {}", e.getMessage());
         }
 
         // Get configuration from system properties, environment variables, or .env file
         String ownerAddress = getConfig("owner", "N3_OWNER_ADDRESS", true);
         String neofsContract = getConfig("neofsContract", "N3_NEOFS_CONTRACT", true);
         String messageBridge = getConfig("messageBridge", "N3_MESSAGE_BRIDGE", true);
+        String executionManager = getConfig("executionManager", "N3_EXECUTION_MANAGER", true);
         String nativeBridge = getConfig("nativeBridge", "N3_NATIVE_BRIDGE", false);
+        String evmProxyContract = getConfig("evmProxyContract", "N3_EVM_PROXY_CONTRACT", false);
         String walletPath = getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
         String walletPassword = getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
         String rpcUrl = getConfig("rpcUrl", "N3_JSON_RPC", false);
@@ -93,8 +103,12 @@ public class DeployNeoFSFundProxy {
         logger.info("Owner: {}", ownerAddress);
         logger.info("NeoFS Contract: {}", neofsContract);
         logger.info("Message Bridge: {}", messageBridge);
+        logger.info("Execution Manager: {}", executionManager);
         if (nativeBridge != null && !nativeBridge.isEmpty()) {
             logger.info("Native Bridge: {}", nativeBridge);
+        }
+        if (evmProxyContract != null && !evmProxyContract.isEmpty()) {
+            logger.info("EVM Proxy Contract: {}", evmProxyContract);
         }
 
         // Connect to Neo3 network
@@ -125,18 +139,24 @@ public class DeployNeoFSFundProxy {
         Hash160 owner = parseHash160(ownerAddress);
         Hash160 neofsContractHash = parseHash160(neofsContract);
         Hash160 messageBridgeHash = parseHash160(messageBridge);
+        Hash160 executionManagerHash = parseHash160(executionManager);
         Hash160 nativeBridgeHash = null;
         if (nativeBridge != null && !nativeBridge.isEmpty()) {
             nativeBridgeHash = parseHash160(nativeBridge);
         }
+        Hash160 evmProxyContractHash = null;
+        if (evmProxyContract != null && !evmProxyContract.isEmpty()) {
+            evmProxyContractHash = parseHash160(evmProxyContract);
+        }
 
-        // Create deployment data struct
-        // The DeploymentData struct has 4 Hash160 fields: owner, nativeBridge, neofsContract, messageBridge
+        // Create deployment data struct: owner, nativeBridge, neofsContract, messageBridge, executionManager, evmProxyContract
         io.neow3j.types.ContractParameter deploymentData = io.neow3j.types.ContractParameter.array(
                 io.neow3j.types.ContractParameter.hash160(owner),
                 io.neow3j.types.ContractParameter.hash160(nativeBridgeHash != null ? nativeBridgeHash : Hash160.ZERO),
                 io.neow3j.types.ContractParameter.hash160(neofsContractHash),
-                io.neow3j.types.ContractParameter.hash160(messageBridgeHash)
+                io.neow3j.types.ContractParameter.hash160(messageBridgeHash),
+                io.neow3j.types.ContractParameter.hash160(executionManagerHash),
+                io.neow3j.types.ContractParameter.hash160(evmProxyContractHash != null ? evmProxyContractHash : Hash160.ZERO)
         );
 
         // Build deployment transaction using ContractManagement.

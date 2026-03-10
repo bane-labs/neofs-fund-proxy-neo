@@ -32,6 +32,7 @@ neofs-fund-proxy-neo/
 
 - Java 8 or higher
 - Gradle (or use the included Gradle wrapper)
+- **Docker** – required for running tests (neow3j uses Testcontainers to run neo-express in a container)
 
 ## Setup
 
@@ -255,10 +256,17 @@ After deployment, configure the contract if needed:
 
 ## Testing
 
-Run tests (if test files exist):
+Run tests:
 ```bash
 ./gradlew test
 ```
+
+To see individual test results in the console:
+```bash
+./gradlew test --rerun-tasks --console=plain
+```
+
+The test framework uses **Docker** via [Testcontainers](https://www.testcontainers.org/) (pulled in by `io.neow3j:devpack-test` → `io.neow3j:test-tools`). When tests run, a neo-express container is started automatically. Ensure Docker is running before executing tests.
 
 ## License
 

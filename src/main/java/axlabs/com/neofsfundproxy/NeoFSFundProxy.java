@@ -18,6 +18,7 @@ import io.neow3j.devpack.events.Event3Args;
 import io.neow3j.devpack.contracts.ContractInterface;
 import io.neow3j.devpack.contracts.GasToken;
 import io.neow3j.devpack.contracts.ContractManagement;
+import io.neow3j.devpack.contracts.StdLib;
 
 import static io.neow3j.devpack.Helper.abort;
 import static io.neow3j.devpack.Runtime.checkWitness;
@@ -38,6 +39,8 @@ public class NeoFSFundProxy {
     private static final int KEY_OWNER = 0x03;
     private static final int KEY_NEOFS_CONTRACT = 0x04;
     private static final int KEY_MESSAGE_BRIDGE = 0x05;
+    private static final int KEY_EXECUTION_MANAGER = 0x06;
+    private static final int KEY_EVM_PROXY_CONTRACT = 0x07;
 
     private static final StorageContext ctx = Storage.getStorageContext();
     private static final StorageMap baseMap = new StorageMap(ctx, PREFIX_BASE);
@@ -64,6 +67,30 @@ public class NeoFSFundProxy {
         public Hash160 nativeBridge;
         public Hash160 neofsContract;
         public Hash160 messageBridge;
+        public Hash160 executionManager;
+        /** EVM-side proxy contract address (20 bytes, same as Hash160). Optional; can be set later via setEvmProxyContract. */
+        public Hash160 evmProxyContract;
+    }
+
+    /**
+     * Message shape returned by the message bridge getMessage(nonce). Layout must match bridge's NeoMessage.
+     */
+    @Struct
+    private static class MessageWithMetadata {
+        public ByteString metadataBytes;
+        public ByteString rawMessage;
+    }
+
+    /**
+     * Metadata shape for executable messages. Used to deserialize message bridge metadata and read sender (EVM address).
+     * Layout matches bridge's NeoMetadataExecutable: type, timestamp, sender, storeResult.
+     */
+    @Struct
+    private static class MetadataWithSender {
+        public int type;
+        public int timestamp;
+        public Hash160 sender;
+        public boolean storeResult;
     }
 
     /**
@@ -82,8 +109,34 @@ public class NeoFSFundProxy {
             int nonce,
             int requestId
     ) {
-        // Only message bridge can call this function
-        OnlyMsgBridge();
+        // Only execution manager can call this function
+        onlyExecutionManager();
+
+        validateHash(beneficiary, "Invalid beneficiary");
+
+        // Verify that the message was sent from the allowed EVM proxy contract (if configured).
+        // Use the executing nonce from the execution manager (message nonce), not the withdrawal nonce
+        // passed as arg - the arg nonce is for claimNative only.
+        Hash160 evmProxy = baseMap.getHash160(KEY_EVM_PROXY_CONTRACT);
+        if (evmProxy != null && !evmProxy.isZero()) {
+            Hash160 executionManagerHash = baseMap.getHash160(KEY_EXECUTION_MANAGER);
+            validateHash(executionManagerHash, "Execution manager not set");
+            int executingNonce = new ExecutionManagerInterface(executionManagerHash).getExecutingNonce();
+            if (executingNonce == 0) {
+                abort("No message is currently being executed");
+            }
+            Hash160 messageBridgeHash = baseMap.getHash160(KEY_MESSAGE_BRIDGE);
+            validateHash(messageBridgeHash, "Message bridge not set");
+            MessageBridgeInterface messageBridge = new MessageBridgeInterface(messageBridgeHash);
+            MessageWithMetadata message = messageBridge.getMessage(executingNonce);
+            if (message == null || message.metadataBytes == null) {
+                abort("Message not found for nonce");
+            }
+            MetadataWithSender metadata = (MetadataWithSender) new StdLib().deserialize(message.metadataBytes);
+            if (metadata == null || metadata.sender == null || !metadata.sender.equals(evmProxy)) {
+                abort("Message sender is not the allowed EVM proxy contract");
+            }
+        }
 
         // Claim native tokens from the bridge using the provided nonce
         Hash160 bridgeHash = baseMap.getHash160(KEY_NATIVE_BRIDGE);
@@ -171,6 +224,17 @@ public class NeoFSFundProxy {
             }
             validateHash(deployData.messageBridge, "Invalid message bridge");
             baseMap.put(KEY_MESSAGE_BRIDGE, deployData.messageBridge);
+
+                        // Set execution manager (required)
+            if (deployData.executionManager == null || !Hash160.isValid(deployData.executionManager) || deployData.executionManager.isZero()) {
+                abort("Invalid execution manager - execution manager is required");
+            }
+            baseMap.put(KEY_EXECUTION_MANAGER, deployData.executionManager);
+
+            // Set EVM proxy contract address if provided (optional at deploy; can be set later via setEvmProxyContract)
+            if (deployData.evmProxyContract != null && Hash160.isValid(deployData.evmProxyContract) && !deployData.evmProxyContract.isZero()) {
+                baseMap.put(KEY_EVM_PROXY_CONTRACT, deployData.evmProxyContract);
+            }
         }
     }
 
@@ -240,6 +304,31 @@ public class NeoFSFundProxy {
     }
 
     /**
+     * Sets the EVM-side proxy contract address (20-byte address as Hash160).
+     * Only the owner can call this method.
+     * When set, fundNeoFS will only accept messages whose metadata sender equals this address.
+     *
+     * @param evmProxyContractHash The EVM proxy contract address (Hash160, 20 bytes)
+     */
+    public static void setEvmProxyContract(Hash160 evmProxyContractHash) {
+        onlyOwner();
+        if (evmProxyContractHash == null || !Hash160.isValid(evmProxyContractHash)) {
+            abort("Invalid EVM proxy contract hash");
+        }
+        baseMap.put(KEY_EVM_PROXY_CONTRACT, evmProxyContractHash);
+    }
+
+    /**
+     * Gets the EVM-side proxy contract address.
+     *
+     * @return The EVM proxy contract address (Hash160), or null if not set
+     */
+    @Safe
+    public static Hash160 getEvmProxyContract() {
+        return baseMap.getHash160(KEY_EVM_PROXY_CONTRACT);
+    }
+
+    /**
      * Sets the owner address.
      * Only the current owner can call this method.
      * 
@@ -290,16 +379,32 @@ public class NeoFSFundProxy {
     }
 
     /**
-     * Checks that the caller is the message bridge.
+     * Checks that the caller is the execution manager.
      * Aborts if not authorized.
      */
-    private static void OnlyMsgBridge() {
-        Hash160 messageBridge = baseMap.getHash160(KEY_MESSAGE_BRIDGE);
-        validateHash(messageBridge, "Message bridge address not set");
-        Hash160 callingScriptHash = getCallingScriptHash();
-        if (!callingScriptHash.equals(messageBridge)) {
-            abort("No authorization - only message bridge");
+    private static void onlyExecutionManager() {
+        Hash160 executionManager = baseMap.getHash160(KEY_EXECUTION_MANAGER);
+        if (executionManager == null || executionManager.isZero()) {
+            abort("Execution manager not set");
         }
+        Hash160 callingScriptHash = getCallingScriptHash();
+        if (!callingScriptHash.equals(executionManager)) {
+            abort("No authorization - only execution manager");
+        }
+    }
+
+    /**
+     * Sets the execution manager contract address.
+     * Only the owner can call this method.
+     * 
+     * @param executionManagerHash The execution manager contract hash
+     */
+    public static void setExecutionManager(Hash160 executionManagerHash) {
+        onlyOwner();
+        if (executionManagerHash == null || !Hash160.isValid(executionManagerHash) || executionManagerHash.isZero()) {
+            abort("Invalid execution manager hash");
+        }
+        baseMap.put(KEY_EXECUTION_MANAGER, executionManagerHash);
     }
 
     /**
@@ -329,6 +434,30 @@ public class NeoFSFundProxy {
         }
         
         // Payment accepted - GAS will be added to contract balance
+    }
+
+    /**
+     * Interface for calling the execution manager (getExecutingNonce to get current message nonce).
+     */
+    private static class ExecutionManagerInterface extends ContractInterface {
+        public ExecutionManagerInterface(Hash160 contractHash) {
+            super(contractHash);
+        }
+
+        @CallFlags(io.neow3j.devpack.constants.CallFlags.ReadStates)
+        public native int getExecutingNonce();
+    }
+
+    /**
+     * Interface for calling the message bridge contract (getMessage to read metadata).
+     */
+    private static class MessageBridgeInterface extends ContractInterface {
+        public MessageBridgeInterface(Hash160 contractHash) {
+            super(contractHash);
+        }
+
+        @CallFlags(io.neow3j.devpack.constants.CallFlags.ReadOnly)
+        public native MessageWithMetadata getMessage(int nonce);
     }
 
     /**

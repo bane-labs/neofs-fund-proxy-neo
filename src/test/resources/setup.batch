@@ -1,0 +1,4 @@
+transfer 10000 GAS genesis Alice
+transfer 1000 NEO genesis Alice
+transfer 10000 GAS genesis owner
+transfer 1000 NEO genesis owner

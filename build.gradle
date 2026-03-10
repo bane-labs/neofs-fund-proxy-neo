@@ -1,7 +1,7 @@
 plugins {
     id 'java'
     id 'application'
-    id 'io.neow3j.gradle-plugin' version '3.24.0'
+    id 'io.neow3j.gradle-plugin' version '3.24.2-SNAPSHOT'
 }
 
 group 'axlabs.com.neofsfundproxy'
@@ -13,6 +13,7 @@ java {
 }
 
 repositories {
+    maven { url "https://central.sonatype.com/repository/maven-snapshots/" }
     mavenCentral()
 }
 
@@ -29,15 +30,17 @@ sourceSets {
 }
 
 dependencies {
-    implementation 'io.neow3j:devpack:3.24.0'
+    implementation 'io.neow3j:devpack:3.24.2-SNAPSHOT'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.9.0',
-            'io.neow3j:devpack-test:3.24.0',
+            'org.junit.platform:junit-platform-launcher',
+            'io.neow3j:devpack-test:3.24.2-SNAPSHOT',
+            'io.neow3j:contract:3.24.2-SNAPSHOT',
             'ch.qos.logback:logback-classic:1.3.4'
 
-    deployImplementation 'io.neow3j:compiler:3.24.0',
-            'io.neow3j:devpack:3.24.0',
-            'io.neow3j:contract:3.24.0',
+    deployImplementation 'io.neow3j:compiler:3.24.2-SNAPSHOT',
+            'io.neow3j:devpack:3.24.2-SNAPSHOT',
+            'io.neow3j:contract:3.24.2-SNAPSHOT',
             'com.google.code.gson:gson:2.10.1',
             'ch.qos.logback:logback-classic:1.4.14',
             'io.github.cdimascio:dotenv-java:3.0.0'
@@ -45,6 +48,11 @@ dependencies {
 
 tasks.withType(Test).configureEach {
     useJUnitPlatform()
+    dependsOn 'neow3jCompile'
+    testLogging {
+        events "passed", "skipped", "failed"
+        exceptionFormat "full"
+    }
 }
 
 neow3jCompiler {
@@ -70,6 +78,7 @@ task deploy(type: JavaExec) {
 
     dependsOn 'neow3jCompile'
 
+    workingDir = project.projectDir
     classpath = sourceSets.deploy.runtimeClasspath
     mainClass = 'axlabs.com.neofsfundproxy.DeployNeoFSFundProxy'
 
@@ -87,6 +96,7 @@ task upgrade(type: JavaExec) {
 
     dependsOn 'neow3jCompile'
 
+    workingDir = project.projectDir
     classpath = sourceSets.deploy.runtimeClasspath
     mainClass = 'axlabs.com.neofsfundproxy.UpgradeNeoFSFundProxy'
 
@@ -94,5 +104,44 @@ task upgrade(type: JavaExec) {
     systemProperties System.getProperties()
 
     // Pass through environment variables
+    environment System.getenv()
+}
+
+// Set execution manager on the deployed NeoFSFundProxy (owner only)
+task setExecutionManager(type: JavaExec) {
+    description = 'Set execution manager on deployed NeoFSFundProxy (-PcontractHash=<hash> -PexecutionManager=<hash> -PwalletPath=...)'
+    group = 'deployment'
+
+    workingDir = project.projectDir
+    classpath = sourceSets.deploy.runtimeClasspath
+    mainClass = 'axlabs.com.neofsfundproxy.SetExecutionManager'
+
+    systemProperties System.getProperties()
+    environment System.getenv()
+}
+
+// Set EVM proxy contract address on the deployed NeoFSFundProxy (owner only)
+task setEvmProxyContract(type: JavaExec) {
+    description = 'Set EVM proxy contract on deployed NeoFSFundProxy (-PcontractHash=<hash> -PevmProxyContract=<20_byte_hex> -PwalletPath=...)'
+    group = 'deployment'
+
+    workingDir = project.projectDir
+    classpath = sourceSets.deploy.runtimeClasspath
+    mainClass = 'axlabs.com.neofsfundproxy.SetEvmProxyContract'
+
+    systemProperties System.getProperties()
+    environment System.getenv()
+}
+
+// Invoke all getters on the deployed NeoFSFundProxy and print status (read-only, no wallet required)
+task getNeoFSFundProxyStatus(type: JavaExec) {
+    description = 'Print all getter values from deployed NeoFSFundProxy (-PcontractHash=<hash> or N3_CONTRACT_HASH in .env)'
+    group = 'deployment'
+
+    workingDir = project.projectDir
+    classpath = sourceSets.deploy.runtimeClasspath
+    mainClass = 'axlabs.com.neofsfundproxy.GetNeoFSFundProxyStatus'
+
+    systemProperties System.getProperties()
     environment System.getenv()
 }
