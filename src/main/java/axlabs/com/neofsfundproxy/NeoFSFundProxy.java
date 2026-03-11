@@ -3,7 +3,6 @@ package axlabs.com.neofsfundproxy;
 import io.neow3j.devpack.ByteString;
 import io.neow3j.devpack.Hash160;
 import io.neow3j.devpack.Storage;
-import io.neow3j.devpack.StorageContext;
 import io.neow3j.devpack.StorageMap;
 import io.neow3j.devpack.annotations.CallFlags;
 import io.neow3j.devpack.annotations.DisplayName;
@@ -42,8 +41,7 @@ public class NeoFSFundProxy {
     private static final int KEY_EXECUTION_MANAGER = 0x06;
     private static final int KEY_EVM_PROXY_CONTRACT = 0x07;
 
-    private static final StorageContext ctx = Storage.getStorageContext();
-    private static final StorageMap baseMap = new StorageMap(ctx, PREFIX_BASE);
+    private static final StorageMap baseMap = new StorageMap(PREFIX_BASE);
 
     public static final GasToken gasToken = new GasToken();
 
@@ -114,36 +112,37 @@ public class NeoFSFundProxy {
 
         validateHash(beneficiary, "Invalid beneficiary");
 
-        // Verify that the message was sent from the allowed EVM proxy contract (if configured).
-        // Use the executing nonce from the execution manager (message nonce), not the withdrawal nonce
-        // passed as arg - the arg nonce is for claimNative only.
+        // Verify that the message was sent from the allowed EVM proxy contract.
+        // Use the executing nonce from the execution manager (message nonce), the arg nonce is only used with the native bridge
         Hash160 evmProxy = baseMap.getHash160(KEY_EVM_PROXY_CONTRACT);
-        if (evmProxy != null && !evmProxy.isZero()) {
-            Hash160 executionManagerHash = baseMap.getHash160(KEY_EXECUTION_MANAGER);
-            validateHash(executionManagerHash, "Execution manager not set");
-            int executingNonce = new ExecutionManagerInterface(executionManagerHash).getExecutingNonce();
-            if (executingNonce == 0) {
-                abort("No message is currently being executed");
-            }
-            Hash160 messageBridgeHash = baseMap.getHash160(KEY_MESSAGE_BRIDGE);
-            validateHash(messageBridgeHash, "Message bridge not set");
-            MessageBridgeInterface messageBridge = new MessageBridgeInterface(messageBridgeHash);
-            MessageWithMetadata message = messageBridge.getMessage(executingNonce);
-            if (message == null || message.metadataBytes == null) {
-                abort("Message not found for nonce");
-            }
-            MetadataWithSender metadata = (MetadataWithSender) new StdLib().deserialize(message.metadataBytes);
-            if (metadata == null || metadata.sender == null || !metadata.sender.equals(evmProxy)) {
-                abort("Message sender is not the allowed EVM proxy contract");
-            }
+        validateHash(evmProxy, "EVM proxy bridge not set");
+
+        Hash160 executionManagerHash = baseMap.getHash160(KEY_EXECUTION_MANAGER);
+        validateHash(executionManagerHash, "Execution manager not set");
+        int executingNonce = new ExecutionManagerInterface(executionManagerHash).getExecutingNonce();
+        if (executingNonce == 0) {
+            abort("No message is currently being executed");
+        }
+
+        Hash160 messageBridgeHash = baseMap.getHash160(KEY_MESSAGE_BRIDGE);
+        validateHash(messageBridgeHash, "Message bridge not set");
+
+        MessageBridgeInterface messageBridge = new MessageBridgeInterface(messageBridgeHash);
+        MessageWithMetadata message = messageBridge.getMessage(executingNonce);
+        if (message == null || message.metadataBytes == null) {
+            abort("Message not found for nonce");
+        }
+        MetadataWithSender metadata = (MetadataWithSender) new StdLib().deserialize(message.metadataBytes);
+        if (metadata == null || metadata.sender == null || !metadata.sender.equals(evmProxy)) {
+            abort("Message sender is not the allowed EVM proxy contract");
         }
 
         // Claim native tokens from the bridge using the provided nonce
         Hash160 bridgeHash = baseMap.getHash160(KEY_NATIVE_BRIDGE);
-        if (bridgeHash != null && !bridgeHash.isZero()) {
-            BridgeInterface bridge = new BridgeInterface(bridgeHash);
-            bridge.claimNative(nonce);
-        }
+        validateHash(bridgeHash, "NeoFS contract address not set");
+
+        BridgeInterface bridge = new BridgeInterface(bridgeHash);
+        bridge.claimNative(nonce);
 
         // Transfer full contract balance to the NeoFS contract stored in contract storage
         Hash160 neofsContract = baseMap.getHash160(KEY_NEOFS_CONTRACT);
