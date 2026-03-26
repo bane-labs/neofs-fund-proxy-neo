@@ -102,7 +102,7 @@ public class NeoFSFundProxy {
      * @param requestId   The request ID returned at the end of the call
      * @return The request ID
      */
-    public static int fundNeoFS(
+    public static void fundNeoFS(
             Hash160 beneficiary,
             int nonce,
             int requestId
@@ -115,17 +115,17 @@ public class NeoFSFundProxy {
         // Verify that the message was sent from the allowed EVM proxy contract.
         // Use the executing nonce from the execution manager (message nonce), the arg nonce is only used with the native bridge
         Hash160 evmProxy = baseMap.getHash160(KEY_EVM_PROXY_CONTRACT);
-        validateHash(evmProxy, "EVM proxy bridge not set");
+        //validateHash(evmProxy, "EVM proxy bridge not set");
 
         Hash160 executionManagerHash = baseMap.getHash160(KEY_EXECUTION_MANAGER);
-        validateHash(executionManagerHash, "Execution manager not set");
+        //validateHash(executionManagerHash, "Execution manager not set");
         int executingNonce = new ExecutionManagerInterface(executionManagerHash).getExecutingNonce();
         if (executingNonce == 0) {
             abort("No message is currently being executed");
         }
 
         Hash160 messageBridgeHash = baseMap.getHash160(KEY_MESSAGE_BRIDGE);
-        validateHash(messageBridgeHash, "Message bridge not set");
+        //validateHash(messageBridgeHash, "Message bridge not set");
 
         MessageBridgeInterface messageBridge = new MessageBridgeInterface(messageBridgeHash);
         MessageWithMetadata message = messageBridge.getMessage(executingNonce);
@@ -139,28 +139,23 @@ public class NeoFSFundProxy {
 
         // Claim native tokens from the bridge using the provided nonce
         Hash160 bridgeHash = baseMap.getHash160(KEY_NATIVE_BRIDGE);
-        validateHash(bridgeHash, "NeoFS contract address not set");
+        //validateHash(bridgeHash, "NeoFS contract address not set");
 
         BridgeInterface bridge = new BridgeInterface(bridgeHash);
         bridge.claimNative(nonce);
 
         // Transfer full contract balance to the NeoFS contract stored in contract storage
         Hash160 neofsContract = baseMap.getHash160(KEY_NEOFS_CONTRACT);
-        validateHash(neofsContract, "NeoFS contract address not set");
+        //validateHash(neofsContract, "NeoFS contract address not set");
         
-        Hash160 contractHash = getExecutingScriptHash();
-        int balance = gasToken.balanceOf(contractHash);
+        Hash160 executingHash = getExecutingScriptHash();
+        int balance = gasToken.balanceOf(executingHash);
         
-        if (balance > 0) {
-            boolean transferred = gasToken.transfer(contractHash, neofsContract, balance, beneficiary);
-            if (!transferred) {
-                abort("Failed to transfer GAS to NeoFS contract");
-            }
+        if (gasToken.transfer(executingHash, neofsContract, balance, beneficiary)) {
+           abort("Failed to transfer GAS to NeoFS contract");
         }
 
         onNeoFSFunded.fire(beneficiary, balance, requestId);
-
-        return requestId;
     }
 
     /**
@@ -191,49 +186,28 @@ public class NeoFSFundProxy {
             if (data == null) {
                 abort("Invalid deployment data - DeploymentData struct required");
             }
+
             DeploymentData deployData = (DeploymentData) data;
             
-            // Validate and set owner
-            if (!Hash160.isValid(deployData.owner)) {
-                abort("Invalid owner");
-            }
             validateHash(deployData.owner, "Invalid owner");
             baseMap.put(KEY_OWNER, deployData.owner);
             
-            // Owner must witness the deployment
-            if (!checkWitness(owner())) {
-                abort("Owner must witness the deployment");
-            }
-            
             // Set native bridge if provided
-            if (deployData.nativeBridge != null && Hash160.isValid(deployData.nativeBridge) && !deployData.nativeBridge.isZero()) {
-                baseMap.put(KEY_NATIVE_BRIDGE, deployData.nativeBridge);
-            }
+            validateHash(deployData.nativeBridge, "Invalid native bridge");
+            baseMap.put(KEY_NATIVE_BRIDGE, deployData.nativeBridge);
             
-            // Set NeoFS contract - required
-            if (!Hash160.isValid(deployData.neofsContract)) {
-                abort("Invalid NeoFS contract");
-            }
             validateHash(deployData.neofsContract, "Invalid NeoFS contract");
             baseMap.put(KEY_NEOFS_CONTRACT, deployData.neofsContract);
             
-            // Set message bridge - required
-            if (!Hash160.isValid(deployData.messageBridge)) {
-                abort("Invalid message bridge");
-            }
             validateHash(deployData.messageBridge, "Invalid message bridge");
             baseMap.put(KEY_MESSAGE_BRIDGE, deployData.messageBridge);
 
-                        // Set execution manager (required)
-            if (deployData.executionManager == null || !Hash160.isValid(deployData.executionManager) || deployData.executionManager.isZero()) {
-                abort("Invalid execution manager - execution manager is required");
-            }
+            validateHash(deployData.executionManager, "Invalid execution manager");
             baseMap.put(KEY_EXECUTION_MANAGER, deployData.executionManager);
 
             // Set EVM proxy contract address if provided (optional at deploy; can be set later via setEvmProxyContract)
-            if (deployData.evmProxyContract != null && Hash160.isValid(deployData.evmProxyContract) && !deployData.evmProxyContract.isZero()) {
-                baseMap.put(KEY_EVM_PROXY_CONTRACT, deployData.evmProxyContract);
-            }
+            validateHash(deployData.evmProxyContract, "Invalid proxy contract");
+            baseMap.put(KEY_EVM_PROXY_CONTRACT, deployData.evmProxyContract);
         }
     }
 
@@ -243,11 +217,8 @@ public class NeoFSFundProxy {
      * 
      * @param bridgeHash The bridge contract hash
      */
-    public static void setNativeBridge(Hash160 bridgeHash) {
+    public static void setTokenBridge(Hash160 bridgeHash) {
         onlyOwner();
-        if (!Hash160.isValid(bridgeHash)) {
-            abort("Invalid bridge hash");
-        }
         validateHash(bridgeHash, "Invalid bridge hash");
         baseMap.put(KEY_NATIVE_BRIDGE, bridgeHash);
     }
@@ -260,9 +231,6 @@ public class NeoFSFundProxy {
      */
     public static void setNeoFSContract(Hash160 neofsContractHash) {
         onlyOwner();
-        if (!Hash160.isValid(neofsContractHash)) {
-            abort("Invalid NeoFS contract hash");
-        }
         validateHash(neofsContractHash, "Invalid NeoFS contract hash");
         baseMap.put(KEY_NEOFS_CONTRACT, neofsContractHash);
     }
@@ -285,9 +253,6 @@ public class NeoFSFundProxy {
      */
     public static void setMessageBridge(Hash160 messageBridgeHash) {
         onlyOwner();
-        if (!Hash160.isValid(messageBridgeHash)) {
-            abort("Invalid message bridge hash");
-        }
         validateHash(messageBridgeHash, "Invalid message bridge hash");
         baseMap.put(KEY_MESSAGE_BRIDGE, messageBridgeHash);
     }
@@ -311,9 +276,7 @@ public class NeoFSFundProxy {
      */
     public static void setEvmProxyContract(Hash160 evmProxyContractHash) {
         onlyOwner();
-        if (evmProxyContractHash == null || !Hash160.isValid(evmProxyContractHash)) {
-            abort("Invalid EVM proxy contract hash");
-        }
+	validateHash(evmProxyContractHash, "Invalid proxy contract hash")
         baseMap.put(KEY_EVM_PROXY_CONTRACT, evmProxyContractHash);
     }
 
@@ -362,7 +325,7 @@ public class NeoFSFundProxy {
      * @param errorMessage The error message to display if validation fails
      */
     private static void validateHash(Hash160 hash, String errorMessage) {
-        if (hash == null || hash.isZero()) {
+        if (hash == null || !Hash160.isValid(hash) || hash.isZero()) {
             abort(errorMessage);
         }
     }
