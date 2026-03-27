@@ -9,6 +9,7 @@ import static io.neow3j.devpack.Helper.abort;
 import static io.neow3j.devpack.Helper.concat;
 import static io.neow3j.devpack.Helper.reverse;
 import static io.neow3j.devpack.Helper.toByteArray;
+// REVIEW
 
 /**
  * Library for encoding data in EVM ABI format.

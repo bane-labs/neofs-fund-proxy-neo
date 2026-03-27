@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+// REVIEW
 
 /**
  * Script to invoke all getters on the deployed NeoFSFundProxy contract and print the results.

@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+// REVIEW
 
 /**
  * Script to set the EVM proxy contract address on the deployed NeoFSFundProxy contract.

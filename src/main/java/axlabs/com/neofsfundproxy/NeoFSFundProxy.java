@@ -23,6 +23,7 @@ import static io.neow3j.devpack.Helper.abort;
 import static io.neow3j.devpack.Runtime.checkWitness;
 import static io.neow3j.devpack.Runtime.getCallingScriptHash;
 import static io.neow3j.devpack.Runtime.getExecutingScriptHash;
+// REVIEW
 
 /**
  * NeoFS fund proxy contract for funding NeoFS via bridge.
