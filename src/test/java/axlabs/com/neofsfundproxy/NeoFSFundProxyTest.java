@@ -1,5 +1,9 @@
 package axlabs.com.neofsfundproxy;
 
+import axlabs.com.neofsfundproxy.testhelper.DummyExecutionManagerContract;
+import axlabs.com.neofsfundproxy.testhelper.DummyMessageBridgeContract;
+import axlabs.com.neofsfundproxy.testhelper.DummyNativeBridgeContract;
+import axlabs.com.neofsfundproxy.testhelper.DummyNeoFSContract;
 import io.neow3j.contract.ContractManagement;
 import io.neow3j.contract.GasToken;
 import io.neow3j.contract.NefFile;
@@ -13,7 +17,6 @@ import io.neow3j.test.DeployConfiguration;
 import io.neow3j.transaction.AccountSigner;
 import io.neow3j.transaction.exceptions.TransactionConfigurationException;
 import io.neow3j.types.Hash160;
-import io.neow3j.utils.Await;
 import io.neow3j.wallet.Account;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -23,10 +26,10 @@ import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.file.Files;
-import java.nio.file.Paths;
 
 import static io.neow3j.types.ContractParameter.hash160;
 import static io.neow3j.types.ContractParameter.integer;
+import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -39,10 +42,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @ContractTest(
         blockTime = 1,
         contracts = {
-                axlabs.com.neofsfundproxy.testhelper.DummyExecutionManagerContract.class,
-                axlabs.com.neofsfundproxy.testhelper.DummyMessageBridgeContract.class,
-                axlabs.com.neofsfundproxy.testhelper.DummyNativeBridgeContract.class,
-                axlabs.com.neofsfundproxy.testhelper.DummyNeoFSContract.class
+                DummyExecutionManagerContract.class,
+                DummyMessageBridgeContract.class,
+                DummyNativeBridgeContract.class,
+                DummyNeoFSContract.class
         },
         batchFile = "setup.batch"
 )
@@ -68,20 +71,16 @@ public class NeoFSFundProxyTest {
         gasToken = new GasToken(neow3j);
 
         // Deploy NeoFSFundProxy manually with references to the dummy contracts
-        Hash160 execManagerHash = ext.getDeployedContract(
-                axlabs.com.neofsfundproxy.testhelper.DummyExecutionManagerContract.class).getScriptHash();
-        Hash160 messageBridgeHash = ext.getDeployedContract(
-                axlabs.com.neofsfundproxy.testhelper.DummyMessageBridgeContract.class).getScriptHash();
-        Hash160 nativeBridgeHash = ext.getDeployedContract(
-                axlabs.com.neofsfundproxy.testhelper.DummyNativeBridgeContract.class).getScriptHash();
-        Hash160 neofsContractHash = ext.getDeployedContract(
-                axlabs.com.neofsfundproxy.testhelper.DummyNeoFSContract.class).getScriptHash();
+        Hash160 execManagerHash = ext.getDeployedContract(DummyExecutionManagerContract.class).getScriptHash();
+        Hash160 messageBridgeHash = ext.getDeployedContract(DummyMessageBridgeContract.class).getScriptHash();
+        Hash160 tokenBridgeHash = ext.getDeployedContract(DummyNativeBridgeContract.class).getScriptHash();
+        Hash160 neofsContractHash = ext.getDeployedContract(DummyNeoFSContract.class).getScriptHash();
 
-        // Deployment data: owner, nativeBridge, neofsContract, messageBridge, executionManager, evmProxyContract
+        // Deployment data: owner, tokenBridge, neoFSContract, messageBridge, executionManager, evmProxyContract
         Hash160 testEvmProxy = new Hash160("0000000000000000000000000000000000000001");
         io.neow3j.types.ContractParameter deployData = io.neow3j.types.ContractParameter.array(
                 hash160(owner.getScriptHash()),
-                hash160(nativeBridgeHash),
+                hash160(tokenBridgeHash),
                 hash160(neofsContractHash),
                 hash160(messageBridgeHash),
                 hash160(execManagerHash),
@@ -96,35 +95,37 @@ public class NeoFSFundProxyTest {
 
         NefFile nef = NefFile.readFromFile(nefFile);
         String manifestJson = new String(Files.readAllBytes(manifestFile.toPath()));
-        ContractManifest manifest = io.neow3j.wallet.Wallet.OBJECT_MAPPER.readValue(manifestJson, ContractManifest.class);
+        ContractManifest manifest = io.neow3j.wallet.Wallet.OBJECT_MAPPER.readValue(manifestJson,
+                ContractManifest.class);
 
-        proxyHash = SmartContract.calcContractHash(owner.getScriptHash(), nef.getCheckSumAsInteger(), manifest.getName());
+        proxyHash = SmartContract.calcContractHash(owner.getScriptHash(), nef.getCheckSumAsInteger(),
+                manifest.getName());
 
         io.neow3j.transaction.Transaction tx = new ContractManagement(neow3j)
                 .deploy(nef, manifest, deployData)
                 .signers(AccountSigner.global(owner))
                 .sign();
         tx.send();
-        Await.waitUntilTransactionIsExecuted(tx.getTxId(), neow3j);
+        waitUntilTransactionIsExecuted(tx.getTxId(), neow3j);
     }
 
-    @DeployConfig(axlabs.com.neofsfundproxy.testhelper.DummyExecutionManagerContract.class)
-    public static DeployConfiguration deployConfigDummyExecutionManager() throws Exception {
+    @DeployConfig(DummyExecutionManagerContract.class)
+    public static DeployConfiguration deployConfigDummyExecutionManager() {
         return new DeployConfiguration();
     }
 
-    @DeployConfig(axlabs.com.neofsfundproxy.testhelper.DummyMessageBridgeContract.class)
-    public static DeployConfiguration deployConfigDummyMessageBridge() throws Exception {
+    @DeployConfig(DummyMessageBridgeContract.class)
+    public static DeployConfiguration deployConfigDummyMessageBridge() {
         return new DeployConfiguration();
     }
 
-    @DeployConfig(axlabs.com.neofsfundproxy.testhelper.DummyNativeBridgeContract.class)
-    public static DeployConfiguration deployConfigDummyNativeBridge() throws Exception {
+    @DeployConfig(DummyNativeBridgeContract.class)
+    public static DeployConfiguration deployConfigDummyNativeBridge() {
         return new DeployConfiguration();
     }
 
-    @DeployConfig(axlabs.com.neofsfundproxy.testhelper.DummyNeoFSContract.class)
-    public static DeployConfiguration deployConfigDummyNeoFS() throws Exception {
+    @DeployConfig(DummyNeoFSContract.class)
+    public static DeployConfiguration deployConfigDummyNeoFS() {
         return new DeployConfiguration();
     }
 
@@ -139,8 +140,7 @@ public class NeoFSFundProxyTest {
 
     @Test
     public void testDeployment_getNeoFSContractReturnsDeployedHash() throws Exception {
-        Hash160 neofsHash = ext.getDeployedContract(
-                axlabs.com.neofsfundproxy.testhelper.DummyNeoFSContract.class).getScriptHash();
+        Hash160 neofsHash = ext.getDeployedContract(DummyNeoFSContract.class).getScriptHash();
         SmartContract proxy = new SmartContract(proxyHash, neow3j);
         Hash160 result = proxy.callFunctionReturningScriptHash("getNeoFSContract");
         assertThat(result.toAddress(), is(neofsHash.toAddress()));
@@ -148,8 +148,7 @@ public class NeoFSFundProxyTest {
 
     @Test
     public void testDeployment_getMessageBridgeReturnsDeployedHash() throws Exception {
-        Hash160 msgBridgeHash = ext.getDeployedContract(
-                axlabs.com.neofsfundproxy.testhelper.DummyMessageBridgeContract.class).getScriptHash();
+        Hash160 msgBridgeHash = ext.getDeployedContract(DummyMessageBridgeContract.class).getScriptHash();
         SmartContract proxy = new SmartContract(proxyHash, neow3j);
         Hash160 result = proxy.callFunctionReturningScriptHash("getMessageBridge");
         assertThat(result.toAddress(), is(msgBridgeHash.toAddress()));
@@ -171,7 +170,7 @@ public class NeoFSFundProxyTest {
         BigInteger amount = gasToken.toFractions(BigDecimal.ONE);
         io.neow3j.types.Hash256 txHash = gasToken.transfer(alice, proxyHash, amount).sign().send()
                 .getSendRawTransaction().getHash();
-        Await.waitUntilTransactionIsExecuted(txHash, neow3j);
+        waitUntilTransactionIsExecuted(txHash, neow3j);
         assertThat(gasToken.getBalanceOf(proxyHash), is(amount));
     }
 

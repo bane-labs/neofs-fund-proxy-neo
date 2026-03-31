@@ -33,14 +33,16 @@ import java.nio.file.Paths;
  * 3. .env file in the project root
  *
  * Usage:
- *   ./gradlew deploy -Powner=<owner> -PneofsContract=<hash> -PmessageBridge=<hash> -PexecutionManager=<hash> -PevmProxyContract=<evm_20_byte_address> [-PnativeBridge=<hash>] [-PwalletPath=...] [-PwalletPassword=...] [-PrpcUrl=...] [-PdryRun=true]
+ *   ./gradlew deploy -Powner=<owner> -PneofsContract=<hash> -PmessageBridge=<hash> -PexecutionManager=<hash>
+ *       -PevmProxyContract=<evm_20_byte_address> [-PtokenBridge=<hash>] [-PwalletPath=...] [-PwalletPassword=...]
+ *       [-PrpcUrl=...] [-PdryRun=true]
  *
  * Or create a .env file with:
  *   N3_OWNER_ADDRESS=<owner_address>
  *   N3_NEOFS_CONTRACT=<neofs_contract_address>
  *   N3_MESSAGE_BRIDGE=<message_bridge_address>
  *   N3_EXECUTION_MANAGER=<execution_manager_contract_address>  # Required
- *   N3_NATIVE_BRIDGE=<native_bridge_address>  # Optional
+ *   N3_TOKEN_BRIDGE=<token_bridge_address>  # Required
  *   N3_EVM_PROXY_CONTRACT=<evm_proxy_20_byte_hex>  # Required (fundNeoFS checks message sender against this address)
  *   WALLET_FILEPATH_DEPLOYER=<wallet_path>
  *   WALLET_PASSWORD_DEPLOYER=<wallet_password>  # Optional
@@ -63,7 +65,7 @@ public class DeployNeoFSFundProxy {
         String neofsContract = ScriptUtils.getConfig("neofsContract", "N3_NEOFS_CONTRACT", true);
         String messageBridge = ScriptUtils.getConfig("messageBridge", "N3_MESSAGE_BRIDGE", true);
         String executionManager = ScriptUtils.getConfig("executionManager", "N3_EXECUTION_MANAGER", true);
-        String nativeBridge = ScriptUtils.getConfig("nativeBridge", "N3_NATIVE_BRIDGE", false);
+        String tokenBridge = ScriptUtils.getConfig("tokenBridge", "N3_TOKEN_BRIDGE", false);
         String evmProxyContract = ScriptUtils.getConfig("evmProxyContract", "N3_EVM_PROXY_CONTRACT", true);
         String walletPath = ScriptUtils.getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
         String walletPassword = ScriptUtils.getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
@@ -83,8 +85,8 @@ public class DeployNeoFSFundProxy {
         logger.info("NeoFS Contract: {}", neofsContract);
         logger.info("Message Bridge: {}", messageBridge);
         logger.info("Execution Manager: {}", executionManager);
-        if (nativeBridge != null && !nativeBridge.isEmpty()) {
-            logger.info("Native Bridge: {}", nativeBridge);
+        if (tokenBridge != null && !tokenBridge.isEmpty()) {
+            logger.info("Token Bridge: {}", tokenBridge);
         }
         logger.info("EVM Proxy Contract: {}", evmProxyContract);
 
@@ -117,16 +119,13 @@ public class DeployNeoFSFundProxy {
         Hash160 neofsContractHash = ScriptUtils.parseHash160(neofsContract);
         Hash160 messageBridgeHash = ScriptUtils.parseHash160(messageBridge);
         Hash160 executionManagerHash = ScriptUtils.parseHash160(executionManager);
-        Hash160 nativeBridgeHash = null;
-        if (nativeBridge != null && !nativeBridge.isEmpty()) {
-            nativeBridgeHash = ScriptUtils.parseHash160(nativeBridge);
-        }
+        Hash160 tokenBridgeHash = ScriptUtils.parseHash160(tokenBridge);
         Hash160 evmProxyContractHash = ScriptUtils.parseHash160(evmProxyContract);
 
-        // Create deployment data struct: owner, nativeBridge, neofsContract, messageBridge, executionManager, evmProxyContract
+        // Create deployment data struct: owner, tokenBridge, neofsContract, messageBridge, executionManager, evmProxyContract
         io.neow3j.types.ContractParameter deploymentData = io.neow3j.types.ContractParameter.array(
                 io.neow3j.types.ContractParameter.hash160(owner),
-                io.neow3j.types.ContractParameter.hash160(nativeBridgeHash != null ? nativeBridgeHash : Hash160.ZERO),
+                io.neow3j.types.ContractParameter.hash160(tokenBridgeHash),
                 io.neow3j.types.ContractParameter.hash160(neofsContractHash),
                 io.neow3j.types.ContractParameter.hash160(messageBridgeHash),
                 io.neow3j.types.ContractParameter.hash160(executionManagerHash),
