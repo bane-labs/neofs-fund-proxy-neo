@@ -78,13 +78,14 @@ public class NeoFSFundProxyTest {
                 axlabs.com.neofsfundproxy.testhelper.DummyNeoFSContract.class).getScriptHash();
 
         // Deployment data: owner, nativeBridge, neofsContract, messageBridge, executionManager, evmProxyContract
+        Hash160 testEvmProxy = new Hash160("0000000000000000000000000000000000000001");
         io.neow3j.types.ContractParameter deployData = io.neow3j.types.ContractParameter.array(
                 hash160(owner.getScriptHash()),
                 hash160(nativeBridgeHash),
                 hash160(neofsContractHash),
                 hash160(messageBridgeHash),
                 hash160(execManagerHash),
-                hash160(Hash160.ZERO)  // evmProxyContract optional
+                hash160(testEvmProxy)
         );
 
         File nefFile = new File("build/neow3j/NeoFSFundProxy.nef");

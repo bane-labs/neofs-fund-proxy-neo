@@ -66,7 +66,7 @@ public class NeoFSFundProxy {
         public Hash160 neofsContract;
         public Hash160 messageBridge;
         public Hash160 executionManager;
-        /** EVM-side proxy contract address (20 bytes, same as Hash160). Optional; can be set later via setEvmProxyContract. */
+        /** EVM-side proxy contract address (20 bytes, same as Hash160). Required at deploy; owner may change it via {@link #setEvmProxyContract}. */
         public Hash160 evmProxyContract;
     }
 
