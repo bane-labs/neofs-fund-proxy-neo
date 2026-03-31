@@ -138,12 +138,10 @@ public class NeoFSFundProxy {
         tokenBridge.claimNative(withdrawalNonce);
 
         // Transfer full contract balance to the NeoFS contract stored in contract storage
-        Hash160 neoFSContract = getNeoFSContract();
-
         Hash160 executingHash = getExecutingScriptHash();
         int fundAmount = gasToken.balanceOf(executingHash);
 
-        if (!gasToken.transfer(executingHash, neoFSContract, fundAmount, beneficiary)) {
+        if (!gasToken.transfer(executingHash, getNeoFSContract(), fundAmount, beneficiary)) {
            abort("Failed to transfer GAS to NeoFS contract");
         }
 
@@ -229,12 +227,12 @@ public class NeoFSFundProxy {
      * Sets the NeoFS contract address.
      * Only the owner can call this method.
      * 
-     * @param neofsContractHash The NeoFS contract hash
+     * @param neoFSContractHash The NeoFS contract hash
      */
-    public static void setNeoFSContract(Hash160 neofsContractHash) {
+    public static void setNeoFSContract(Hash160 neoFSContractHash) {
         onlyOwner();
-        validateHash(neofsContractHash, "Invalid NeoFS contract hash");
-        baseMap.put(KEY_NEOFS_CONTRACT, neofsContractHash);
+        validateHash(neoFSContractHash, "Invalid NeoFS contract hash");
+        baseMap.put(KEY_NEOFS_CONTRACT, neoFSContractHash);
     }
 
     /**
@@ -361,11 +359,7 @@ public class NeoFSFundProxy {
      * Aborts if not authorized.
      */
     private static void onlyExecutionManager() {
-        Hash160 executionManager = baseMap.getHash160(KEY_EXECUTION_MANAGER);
-        if (executionManager == null || executionManager.isZero()) {
-            abort("Execution manager not set");
-        }
-        if (!getCallingScriptHash().equals(executionManager)) {
+        if (!getCallingScriptHash().equals(getExecutionManager())) {
             abort("No authorization - only execution manager");
         }
     }
