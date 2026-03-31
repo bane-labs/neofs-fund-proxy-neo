@@ -37,7 +37,7 @@ public class NeoFSFundProxy {
     private static final int KEY_MESSAGE_BRIDGE = 0x02;
     private static final int KEY_TOKEN_BRIDGE = 0x03;
     private static final int KEY_EXECUTION_MANAGER = 0x04;
-    private static final int KEY_NEOFS_FUND_PROXY_ON_EVM = 0x05;
+    private static final int KEY_EVM_PROXY = 0x05;
     private static final int KEY_NEOFS_CONTRACT = 0x06;
 
     private static final StorageMap baseMap = new StorageMap(PREFIX_BASE);
@@ -67,9 +67,9 @@ public class NeoFSFundProxy {
         public Hash160 executionManager;
         /**
          * EVM-side proxy contract address (20 bytes, same as Hash160). Required at deploy; owner may change it via
-         * {@link #setNeoFSFundProxyOnEVM(Hash160)}.
+         * {@link #setEvmProxy(Hash160)}.
          */
-        public Hash160 neoFSFundProxyOnEVM;
+        public Hash160 evmProxy;
     }
 
     /**
@@ -115,7 +115,7 @@ public class NeoFSFundProxy {
 
         // Verify that the message was sent from the allowed EVM proxy contract.
         // Use the executing nonce from the execution manager (message nonce), the arg nonce is only used with the token bridge
-        Hash160 proxyOnEVM = getNeoFSFundProxyOnEVM();
+        Hash160 proxyOnEVM = getEvmProxy();
 
         int executingNonce = new ExecutionManagerInterface(getExecutionManager()).getExecutingNonce();
         if (executingNonce == 0) {
@@ -194,8 +194,8 @@ public class NeoFSFundProxy {
             validateHash(deployData.executionManager, "Invalid execution manager");
             baseMap.put(KEY_EXECUTION_MANAGER, deployData.executionManager);
 
-            validateHash(deployData.neoFSFundProxyOnEVM, "Invalid EVM proxy contract");
-            baseMap.put(KEY_NEOFS_FUND_PROXY_ON_EVM, deployData.neoFSFundProxyOnEVM);
+            validateHash(deployData.evmProxy, "Invalid EVM proxy contract");
+            baseMap.put(KEY_EVM_PROXY, deployData.evmProxy);
         }
     }
 
@@ -242,10 +242,10 @@ public class NeoFSFundProxy {
      *
      * @param evmProxyContractHash The EVM proxy contract address (Hash160, 20 bytes)
      */
-    public static void setNeoFSFundProxyOnEVM(Hash160 evmProxyContractHash) {
+    public static void setEvmProxy(Hash160 evmProxyContractHash) {
         onlyOwner();
         validateHash(evmProxyContractHash, "Invalid EVM proxy contract hash");
-        baseMap.put(KEY_NEOFS_FUND_PROXY_ON_EVM, evmProxyContractHash);
+        baseMap.put(KEY_EVM_PROXY, evmProxyContractHash);
     }
 
     /**
@@ -302,8 +302,8 @@ public class NeoFSFundProxy {
      * @return The EVM proxy contract address (Hash160), or null if not set
      */
     @Safe
-    public static Hash160 getNeoFSFundProxyOnEVM() {
-        return baseMap.getHash160(KEY_NEOFS_FUND_PROXY_ON_EVM);
+    public static Hash160 getEvmProxy() {
+        return baseMap.getHash160(KEY_EVM_PROXY);
     }
 
     /**

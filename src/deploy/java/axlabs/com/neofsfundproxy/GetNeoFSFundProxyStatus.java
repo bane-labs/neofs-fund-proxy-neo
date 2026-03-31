@@ -7,8 +7,6 @@ import io.neow3j.types.Hash160;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
-
 /**
  * Script to invoke all getters on the deployed NeoFSFundProxy contract and print the results.
  * No wallet required - read-only invocations.
