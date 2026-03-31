@@ -200,6 +200,26 @@ public class NeoFSFundProxy {
     }
 
     /**
+     * Sets the message bridge contract address.
+     * Only the owner can call this method.
+     *
+     * @param messageBridgeHash The message bridge contract hash
+     */
+    public static void setMessageBridge(Hash160 messageBridgeHash) {
+        onlyOwner();
+        validateHash(messageBridgeHash, "Invalid message bridge hash");
+        baseMap.put(KEY_MESSAGE_BRIDGE, messageBridgeHash);
+    }
+
+    /**
+     * @return The message bridge contract hash
+     */
+    @Safe
+    public static Hash160 getMessageBridge() {
+        return baseMap.getHash160(KEY_MESSAGE_BRIDGE);
+    }
+
+    /**
      * Sets the bridge contract address.
      * Only the owner can call this method.
      * 
@@ -209,6 +229,14 @@ public class NeoFSFundProxy {
         onlyOwner();
         validateHash(bridgeHash, "Invalid bridge hash");
         baseMap.put(KEY_TOKEN_BRIDGE, bridgeHash);
+    }
+
+    /**
+     * @return The token bridge contract hash
+     */
+    @Safe
+    public static Hash160 getTokenBridge() {
+        return baseMap.getHash160(KEY_TOKEN_BRIDGE);
     }
 
     /**
@@ -224,15 +252,11 @@ public class NeoFSFundProxy {
     }
 
     /**
-     * Sets the NeoFS contract address.
-     * Only the owner can call this method.
-     * 
-     * @param neoFSContractHash The NeoFS contract hash
+     * @return The execution manager contract hash
      */
-    public static void setNeoFSContract(Hash160 neoFSContractHash) {
-        onlyOwner();
-        validateHash(neoFSContractHash, "Invalid NeoFS contract hash");
-        baseMap.put(KEY_NEOFS_CONTRACT, neoFSContractHash);
+    @Safe
+    public static Hash160 getExecutionManager() {
+        return baseMap.getHash160(KEY_EXECUTION_MANAGER);
     }
 
     /**
@@ -249,61 +273,33 @@ public class NeoFSFundProxy {
     }
 
     /**
-     * Gets the NeoFS contract address.
-     * 
-     * @return The NeoFS contract hash
-     */
-    @Safe
-    public static Hash160 getNeoFSContract() {
-        return baseMap.getHash160(KEY_NEOFS_CONTRACT);
-    }
-
-    /**
-     * Sets the message bridge contract address.
-     * Only the owner can call this method.
-     * 
-     * @param messageBridgeHash The message bridge contract hash
-     */
-    public static void setMessageBridge(Hash160 messageBridgeHash) {
-        onlyOwner();
-        validateHash(messageBridgeHash, "Invalid message bridge hash");
-        baseMap.put(KEY_MESSAGE_BRIDGE, messageBridgeHash);
-    }
-
-    /**
-     * Gets the execution manager contract address.
-     * 
-     * @return The execution manager contract hash
-     */
-    @Safe
-    public static Hash160 getExecutionManager() {
-        return baseMap.getHash160(KEY_EXECUTION_MANAGER);
-    }
-
-    /**
-     * Gets the message bridge contract address.
-     * 
-     * @return The message bridge contract hash
-     */
-    @Safe
-    public static Hash160 getMessageBridge() {
-        return baseMap.getHash160(KEY_MESSAGE_BRIDGE);
-    }
-
-    /**
-     * @return The token bridge contract hash
-     */
-    @Safe
-    public static Hash160 getTokenBridge() {
-        return baseMap.getHash160(KEY_TOKEN_BRIDGE);
-    }
-
-    /**
      * @return The EVM proxy contract address (Hash160), or null if not set
      */
     @Safe
     public static Hash160 getEvmProxy() {
         return baseMap.getHash160(KEY_EVM_PROXY);
+    }
+
+    /**
+     * Sets the NeoFS contract address.
+     * Only the owner can call this method.
+     *
+     * @param neoFSContractHash The NeoFS contract hash
+     */
+    public static void setNeoFSContract(Hash160 neoFSContractHash) {
+        onlyOwner();
+        validateHash(neoFSContractHash, "Invalid NeoFS contract hash");
+        baseMap.put(KEY_NEOFS_CONTRACT, neoFSContractHash);
+    }
+
+    /**
+     * Gets the NeoFS contract address.
+     *
+     * @return The NeoFS contract hash
+     */
+    @Safe
+    public static Hash160 getNeoFSContract() {
+        return baseMap.getHash160(KEY_NEOFS_CONTRACT);
     }
 
     /**
