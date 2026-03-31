@@ -143,7 +143,7 @@ public class NeoFSFundProxy {
         Hash160 executingHash = getExecutingScriptHash();
         int fundAmount = gasToken.balanceOf(executingHash);
 
-        if (gasToken.transfer(executingHash, neoFSContract, fundAmount, beneficiary)) {
+        if (!gasToken.transfer(executingHash, neoFSContract, fundAmount, beneficiary)) {
            abort("Failed to transfer GAS to NeoFS contract");
         }
 
