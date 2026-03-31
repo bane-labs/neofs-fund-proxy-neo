@@ -2,31 +2,37 @@ package axlabs.com.neofsfundproxy;
 
 import io.neow3j.contract.ContractManagement;
 import io.neow3j.contract.NefFile;
-import io.neow3j.contract.SmartContract;
 import io.neow3j.protocol.Neow3j;
 import io.neow3j.protocol.core.response.NeoApplicationLog;
 import io.neow3j.protocol.core.response.NeoSendRawTransaction;
 import io.neow3j.protocol.core.response.ContractManifest;
 import io.neow3j.protocol.http.HttpService;
-import io.neow3j.transaction.AccountSigner;
+import io.neow3j.transaction.Transaction;
 import io.neow3j.transaction.TransactionBuilder;
 import io.neow3j.types.ContractParameter;
 import io.neow3j.types.Hash160;
 import io.neow3j.types.Hash256;
 import io.neow3j.types.NeoVMStateType;
-import io.neow3j.utils.Await;
 import io.neow3j.wallet.Account;
 import io.neow3j.wallet.Wallet;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 
+import static axlabs.com.neofsfundproxy.ScriptUtils.getConfig;
+import static axlabs.com.neofsfundproxy.ScriptUtils.isDryRun;
+import static axlabs.com.neofsfundproxy.ScriptUtils.loadDotenv;
+import static axlabs.com.neofsfundproxy.ScriptUtils.parseHash160;
+import static io.neow3j.contract.SmartContract.calcContractHash;
+import static io.neow3j.transaction.AccountSigner.global;
 import static io.neow3j.types.ContractParameter.array;
 import static io.neow3j.types.ContractParameter.hash160;
+import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
+import static java.nio.file.Files.readAllBytes;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Deployment script for NeoFSFundProxy contract.
@@ -58,28 +64,28 @@ import static io.neow3j.types.ContractParameter.hash160;
  */
 public class DeployNeoFSFundProxy {
 
-    private static final Logger logger = LoggerFactory.getLogger(DeployNeoFSFundProxy.class);
+    private static final Logger logger = getLogger(DeployNeoFSFundProxy.class);
     private static final String DEFAULT_RPC_URL = "http://localhost:40332";
 
     public static void main(String[] args) throws Throwable {
-        ScriptUtils.loadDotenv(logger);
+        loadDotenv(logger);
 
         // Get configuration from system properties, environment variables, or .env file
-        String ownerAddress = ScriptUtils.getConfig("owner", "N3_OWNER_ADDRESS", true);
-        String neofsContract = ScriptUtils.getConfig("neofsContract", "N3_NEOFS_CONTRACT", true);
-        String messageBridge = ScriptUtils.getConfig("messageBridge", "N3_MESSAGE_BRIDGE", true);
-        String executionManager = ScriptUtils.getConfig("executionManager", "N3_EXECUTION_MANAGER", true);
-        String tokenBridge = ScriptUtils.getConfig("tokenBridge", "N3_TOKEN_BRIDGE", false);
-        String evmProxyContract = ScriptUtils.getConfig("evmProxyContract", "N3_EVM_PROXY_CONTRACT", true);
-        String walletPath = ScriptUtils.getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
-        String walletPassword = ScriptUtils.getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
-        String rpcUrl = ScriptUtils.getConfig("rpcUrl", "N3_JSON_RPC", false);
+        String ownerAddress = getConfig("owner", "N3_OWNER_ADDRESS", true);
+        String neofsContract = getConfig("neofsContract", "N3_NEOFS_CONTRACT", true);
+        String messageBridge = getConfig("messageBridge", "N3_MESSAGE_BRIDGE", true);
+        String executionManager = getConfig("executionManager", "N3_EXECUTION_MANAGER", true);
+        String tokenBridge = getConfig("tokenBridge", "N3_TOKEN_BRIDGE", false);
+        String evmProxyContract = getConfig("evmProxyContract", "N3_EVM_PROXY_CONTRACT", true);
+        String walletPath = getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
+        String walletPassword = getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
+        String rpcUrl = getConfig("rpcUrl", "N3_JSON_RPC", false);
         if (rpcUrl == null || rpcUrl.isEmpty()) {
             rpcUrl = DEFAULT_RPC_URL;
         }
-        String hashFile = ScriptUtils.getConfig("hashFile", "N3_HASH_FILE", false);
-        boolean dryRun = ScriptUtils.isDryRun();
+        String hashFile = getConfig("hashFile", "N3_HASH_FILE", false);
 
+        boolean dryRun = isDryRun();
         if (dryRun) {
             logger.info("=== DRY RUN MODE - Transaction will NOT be submitted ===");
         }
@@ -115,16 +121,16 @@ public class DeployNeoFSFundProxy {
 
         NefFile nef = NefFile.readFromFile(nefFile);
         // Parse manifest using Jackson ObjectMapper from Wallet
-        String manifestJson = new String(Files.readAllBytes(manifestFile.toPath()));
+        String manifestJson = new String(readAllBytes(manifestFile.toPath()));
         ContractManifest manifest = Wallet.OBJECT_MAPPER.readValue(manifestJson, ContractManifest.class);
 
         // Parse addresses/hashes (both Neo3 address format and raw script hash are accepted)
-        Hash160 owner = ScriptUtils.parseHash160(ownerAddress);
-        Hash160 neofsContractHash = ScriptUtils.parseHash160(neofsContract);
-        Hash160 messageBridgeHash = ScriptUtils.parseHash160(messageBridge);
-        Hash160 executionManagerHash = ScriptUtils.parseHash160(executionManager);
-        Hash160 tokenBridgeHash = ScriptUtils.parseHash160(tokenBridge);
-        Hash160 evmProxyContractHash = ScriptUtils.parseHash160(evmProxyContract);
+        Hash160 owner = parseHash160(ownerAddress);
+        Hash160 neofsContractHash = parseHash160(neofsContract);
+        Hash160 messageBridgeHash = parseHash160(messageBridge);
+        Hash160 executionManagerHash = parseHash160(executionManager);
+        Hash160 tokenBridgeHash = parseHash160(tokenBridge);
+        Hash160 evmProxyContractHash = parseHash160(evmProxyContract);
 
         // Create deployment data struct: owner, tokenBridge, neofsContract, messageBridge, executionManager, evmProxyContract
         ContractParameter deploymentData = array(
@@ -142,10 +148,10 @@ public class DeployNeoFSFundProxy {
         // deep from the entry script). calledByEntry would not cover that depth.
         TransactionBuilder builder = new ContractManagement(neow3j)
                 .deploy(nef, manifest, deploymentData)
-                .signers(AccountSigner.global(account));
+                .signers(global(account));
 
         // Calculate contract hash from sender, nef checksum, and manifest name
-        Hash160 contractHash = SmartContract.calcContractHash(
+        Hash160 contractHash = calcContractHash(
                 account.getScriptHash(),
                 nef.getCheckSumAsInteger(),
                 manifest.getName()
@@ -173,7 +179,7 @@ public class DeployNeoFSFundProxy {
 
         // Sign and send transaction
         logger.info("Signing and sending deployment transaction...");
-        io.neow3j.transaction.Transaction tx = builder.sign();
+        Transaction tx = builder.sign();
         NeoSendRawTransaction response = tx.send();
         if (response.hasError()) {
             throw new RuntimeException("Failed to send deployment transaction: " + response.getError().getMessage());
@@ -183,7 +189,7 @@ public class DeployNeoFSFundProxy {
         logger.info("Deployment transaction sent: {}", txHash);
 
         logger.info("Waiting for transaction confirmation...");
-        Await.waitUntilTransactionIsExecuted(txHash, neow3j);
+        waitUntilTransactionIsExecuted(txHash, neow3j);
 
         // Get application log to check result and log details
         NeoApplicationLog appLog = neow3j.getApplicationLog(txHash).send().getApplicationLog();

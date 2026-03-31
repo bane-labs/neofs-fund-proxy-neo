@@ -4,17 +4,24 @@ import io.neow3j.contract.SmartContract;
 import io.neow3j.protocol.Neow3j;
 import io.neow3j.protocol.core.response.NeoSendRawTransaction;
 import io.neow3j.protocol.http.HttpService;
-import io.neow3j.transaction.AccountSigner;
+import io.neow3j.transaction.Transaction;
 import io.neow3j.transaction.TransactionBuilder;
-import io.neow3j.types.ContractParameter;
 import io.neow3j.types.Hash160;
 import io.neow3j.types.Hash256;
 import io.neow3j.wallet.Account;
 import io.neow3j.wallet.Wallet;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
+
+import static axlabs.com.neofsfundproxy.ScriptUtils.getConfig;
+import static axlabs.com.neofsfundproxy.ScriptUtils.isDryRun;
+import static axlabs.com.neofsfundproxy.ScriptUtils.loadDotenv;
+import static axlabs.com.neofsfundproxy.ScriptUtils.parseHash160;
+import static axlabs.com.neofsfundproxy.ScriptUtils.waitAndLogResult;
+import static io.neow3j.transaction.AccountSigner.calledByEntry;
+import static io.neow3j.types.ContractParameter.hash160;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Script to set the execution manager on the deployed NeoFSFundProxy contract.
@@ -27,23 +34,22 @@ import java.io.File;
  */
 public class SetExecutionManager {
 
-    private static final Logger logger = LoggerFactory.getLogger(SetExecutionManager.class);
+    private static final Logger logger = getLogger(SetExecutionManager.class);
     private static final String DEFAULT_RPC_URL = "http://localhost:40332";
 
     public static void main(String[] args) throws Throwable {
-        ScriptUtils.loadDotenv(logger);
+        loadDotenv(logger);
 
-        String contractHashStr = ScriptUtils.getConfig("contractHash", "N3_CONTRACT_HASH", true);
-        String executionManagerStr = ScriptUtils.getConfig("executionManager", "N3_EXECUTION_MANAGER", true);
-        String walletPath = ScriptUtils.getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
-        String walletPassword = ScriptUtils.getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
-        String rpcUrl = ScriptUtils.getConfig("rpcUrl", "N3_JSON_RPC", false);
+        String contractHashStr = getConfig("contractHash", "N3_CONTRACT_HASH", true);
+        String executionManagerStr = getConfig("executionManager", "N3_EXECUTION_MANAGER", true);
+        String walletPath = getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
+        String walletPassword = getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
+        String rpcUrl = getConfig("rpcUrl", "N3_JSON_RPC", false);
         if (rpcUrl == null || rpcUrl.isEmpty()) {
             rpcUrl = DEFAULT_RPC_URL;
         }
-        boolean dryRun = ScriptUtils.isDryRun();
-
-        if (dryRun) {
+        boolean dryRun = isDryRun();
+        if (isDryRun()) {
             logger.info("=== DRY RUN MODE - Transaction will NOT be submitted ===");
         }
         logger.info("Setting execution manager on NeoFSFundProxy...");
@@ -58,12 +64,12 @@ public class SetExecutionManager {
         Account account = wallet.getDefaultAccount();
         logger.info("Owner account:      {}", account.getAddress());
 
-        Hash160 contractHash = ScriptUtils.parseHash160(contractHashStr);
-        Hash160 executionManagerHash = ScriptUtils.parseHash160(executionManagerStr);
+        Hash160 contractHash = parseHash160(contractHashStr);
+        Hash160 executionManagerHash = parseHash160(executionManagerStr);
 
         TransactionBuilder builder = new SmartContract(contractHash, neow3j)
-                .invokeFunction("setExecutionManager", ContractParameter.hash160(executionManagerHash))
-                .signers(AccountSigner.calledByEntry(account));
+                .invokeFunction("setExecutionManager", hash160(executionManagerHash))
+                .signers(calledByEntry(account));
 
         if (dryRun) {
             logger.info("");
@@ -73,7 +79,7 @@ public class SetExecutionManager {
         }
 
         logger.info("Signing and sending transaction...");
-        io.neow3j.transaction.Transaction tx = builder.sign();
+        Transaction tx = builder.sign();
         NeoSendRawTransaction response = tx.send();
         if (response.hasError()) {
             throw new RuntimeException("Failed to send transaction: " + response.getError().getMessage());
@@ -81,6 +87,6 @@ public class SetExecutionManager {
 
         Hash256 txHash = tx.getTxId();
         logger.info("Transaction sent: {}", txHash);
-        ScriptUtils.waitAndLogResult(logger, neow3j, txHash, contractHash, "SET_EXECUTION_MANAGER");
+        waitAndLogResult(logger, neow3j, txHash, contractHash, "SET_EXECUTION_MANAGER");
     }
 }

@@ -14,10 +14,13 @@ import io.neow3j.test.ContractTest;
 import io.neow3j.test.ContractTestExtension;
 import io.neow3j.test.DeployConfig;
 import io.neow3j.test.DeployConfiguration;
-import io.neow3j.transaction.AccountSigner;
+import io.neow3j.transaction.Transaction;
 import io.neow3j.transaction.exceptions.TransactionConfigurationException;
+import io.neow3j.types.ContractParameter;
 import io.neow3j.types.Hash160;
+import io.neow3j.types.Hash256;
 import io.neow3j.wallet.Account;
+import io.neow3j.wallet.Wallet;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.RegisterExtension;
@@ -25,11 +28,15 @@ import org.junit.jupiter.api.extension.RegisterExtension;
 import java.io.File;
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.nio.file.Files;
 
+import static io.neow3j.contract.SmartContract.calcContractHash;
+import static io.neow3j.transaction.AccountSigner.calledByEntry;
+import static io.neow3j.transaction.AccountSigner.global;
+import static io.neow3j.types.ContractParameter.array;
 import static io.neow3j.types.ContractParameter.hash160;
 import static io.neow3j.types.ContractParameter.integer;
 import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
+import static java.nio.file.Files.readAllBytes;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -78,7 +85,7 @@ public class NeoFSFundProxyTest {
 
         // Deployment data: owner, tokenBridge, neoFSContract, messageBridge, executionManager, evmProxyContract
         Hash160 testEvmProxy = new Hash160("0000000000000000000000000000000000000001");
-        io.neow3j.types.ContractParameter deployData = io.neow3j.types.ContractParameter.array(
+        ContractParameter deployData = array(
                 hash160(owner.getScriptHash()),
                 hash160(tokenBridgeHash),
                 hash160(neofsContractHash),
@@ -94,16 +101,14 @@ public class NeoFSFundProxyTest {
         }
 
         NefFile nef = NefFile.readFromFile(nefFile);
-        String manifestJson = new String(Files.readAllBytes(manifestFile.toPath()));
-        ContractManifest manifest = io.neow3j.wallet.Wallet.OBJECT_MAPPER.readValue(manifestJson,
-                ContractManifest.class);
+        String manifestJson = new String(readAllBytes(manifestFile.toPath()));
+        ContractManifest manifest = Wallet.OBJECT_MAPPER.readValue(manifestJson, ContractManifest.class);
 
-        proxyHash = SmartContract.calcContractHash(owner.getScriptHash(), nef.getCheckSumAsInteger(),
-                manifest.getName());
+        proxyHash = calcContractHash(owner.getScriptHash(), nef.getCheckSumAsInteger(), manifest.getName());
 
-        io.neow3j.transaction.Transaction tx = new ContractManagement(neow3j)
+        Transaction tx = new ContractManagement(neow3j)
                 .deploy(nef, manifest, deployData)
-                .signers(AccountSigner.global(owner))
+                .signers(global(owner))
                 .sign();
         tx.send();
         waitUntilTransactionIsExecuted(tx.getTxId(), neow3j);
@@ -143,7 +148,7 @@ public class NeoFSFundProxyTest {
         Hash160 neofsHash = ext.getDeployedContract(DummyNeoFSContract.class).getScriptHash();
         SmartContract proxy = new SmartContract(proxyHash, neow3j);
         Hash160 result = proxy.callFunctionReturningScriptHash("getNeoFSContract");
-        assertThat(result.toAddress(), is(neofsHash.toAddress()));
+        assertThat(result, is(neofsHash));
     }
 
     @Test
@@ -151,7 +156,7 @@ public class NeoFSFundProxyTest {
         Hash160 msgBridgeHash = ext.getDeployedContract(DummyMessageBridgeContract.class).getScriptHash();
         SmartContract proxy = new SmartContract(proxyHash, neow3j);
         Hash160 result = proxy.callFunctionReturningScriptHash("getMessageBridge");
-        assertThat(result.toAddress(), is(msgBridgeHash.toAddress()));
+        assertThat(result, is(msgBridgeHash));
     }
 
     @Test
@@ -159,7 +164,7 @@ public class NeoFSFundProxyTest {
         TransactionConfigurationException thrown = assertThrows(TransactionConfigurationException.class, () ->
                 new SmartContract(proxyHash, neow3j)
                         .invokeFunction("setOwner", hash160(alice.getScriptHash()))
-                        .signers(AccountSigner.calledByEntry(alice))
+                        .signers(calledByEntry(alice))
                         .sign()
         );
         assertThat(thrown.getMessage(), containsString("No authorization - only owner"));
@@ -168,8 +173,7 @@ public class NeoFSFundProxyTest {
     @Test
     public void testAcceptGASPayment() throws Throwable {
         BigInteger amount = gasToken.toFractions(BigDecimal.ONE);
-        io.neow3j.types.Hash256 txHash = gasToken.transfer(alice, proxyHash, amount).sign().send()
-                .getSendRawTransaction().getHash();
+        Hash256 txHash = gasToken.transfer(alice, proxyHash, amount).sign().send().getSendRawTransaction().getHash();
         waitUntilTransactionIsExecuted(txHash, neow3j);
         assertThat(gasToken.getBalanceOf(proxyHash), is(amount));
     }
