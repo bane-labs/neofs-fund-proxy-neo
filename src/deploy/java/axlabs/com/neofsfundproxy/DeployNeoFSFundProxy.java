@@ -10,6 +10,7 @@ import io.neow3j.protocol.core.response.ContractManifest;
 import io.neow3j.protocol.http.HttpService;
 import io.neow3j.transaction.AccountSigner;
 import io.neow3j.transaction.TransactionBuilder;
+import io.neow3j.types.ContractParameter;
 import io.neow3j.types.Hash160;
 import io.neow3j.types.Hash256;
 import io.neow3j.types.NeoVMStateType;
@@ -23,6 +24,9 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+
+import static io.neow3j.types.ContractParameter.array;
+import static io.neow3j.types.ContractParameter.hash160;
 
 /**
  * Deployment script for NeoFSFundProxy contract.
@@ -123,13 +127,13 @@ public class DeployNeoFSFundProxy {
         Hash160 evmProxyContractHash = ScriptUtils.parseHash160(evmProxyContract);
 
         // Create deployment data struct: owner, tokenBridge, neofsContract, messageBridge, executionManager, evmProxyContract
-        io.neow3j.types.ContractParameter deploymentData = io.neow3j.types.ContractParameter.array(
-                io.neow3j.types.ContractParameter.hash160(owner),
-                io.neow3j.types.ContractParameter.hash160(tokenBridgeHash),
-                io.neow3j.types.ContractParameter.hash160(neofsContractHash),
-                io.neow3j.types.ContractParameter.hash160(messageBridgeHash),
-                io.neow3j.types.ContractParameter.hash160(executionManagerHash),
-                io.neow3j.types.ContractParameter.hash160(evmProxyContractHash)
+        ContractParameter deploymentData = array(
+                hash160(owner),
+                hash160(tokenBridgeHash),
+                hash160(neofsContractHash),
+                hash160(messageBridgeHash),
+                hash160(executionManagerHash),
+                hash160(evmProxyContractHash)
         );
 
         // Build deployment transaction using ContractManagement.

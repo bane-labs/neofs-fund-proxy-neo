@@ -8,6 +8,7 @@ import io.neow3j.protocol.core.response.NeoApplicationLog;
 import io.neow3j.protocol.core.response.NeoSendRawTransaction;
 import io.neow3j.protocol.http.HttpService;
 import io.neow3j.transaction.AccountSigner;
+import io.neow3j.transaction.Transaction;
 import io.neow3j.transaction.TransactionBuilder;
 import io.neow3j.types.ContractParameter;
 import io.neow3j.types.Hash160;
@@ -22,6 +23,11 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+
+import static io.neow3j.types.ContractParameter.any;
+import static io.neow3j.types.ContractParameter.byteArray;
+import static io.neow3j.types.ContractParameter.string;
+import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
 
 /**
  * Upgrade script for NeoFSFundProxy contract.
@@ -105,9 +111,9 @@ public class UpgradeNeoFSFundProxy {
         // upgrade(ByteString nef, String manifest, Object data)
         TransactionBuilder builder = new SmartContract(contractHash, neow3j)
                 .invokeFunction("upgrade",
-                        ContractParameter.byteArray(nef.toArray()),
-                        ContractParameter.string(manifestJson),
-                        ContractParameter.any(null))
+                        byteArray(nef.toArray()),
+                        string(manifestJson),
+                        any(null))
                 .signers(AccountSigner.calledByEntry(account));
 
         if (dryRun) {
@@ -123,7 +129,7 @@ public class UpgradeNeoFSFundProxy {
 
         // Sign and send transaction
         logger.info("Signing and sending upgrade transaction...");
-        io.neow3j.transaction.Transaction tx = builder.sign();
+        Transaction tx = builder.sign();
         NeoSendRawTransaction response = tx.send();
         if (response.hasError()) {
             throw new RuntimeException("Failed to send upgrade transaction: " + response.getError().getMessage());
@@ -133,7 +139,7 @@ public class UpgradeNeoFSFundProxy {
         logger.info("Upgrade transaction sent: {}", txHash);
 
         logger.info("Waiting for transaction confirmation...");
-        Await.waitUntilTransactionIsExecuted(txHash, neow3j);
+        waitUntilTransactionIsExecuted(txHash, neow3j);
 
         // Get application log to check result and log details
         NeoApplicationLog appLog = neow3j.getApplicationLog(txHash).send().getApplicationLog();

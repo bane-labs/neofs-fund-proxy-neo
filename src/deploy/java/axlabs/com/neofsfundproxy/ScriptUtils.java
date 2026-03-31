@@ -6,10 +6,11 @@ import io.neow3j.protocol.core.response.NeoApplicationLog;
 import io.neow3j.types.Hash160;
 import io.neow3j.types.Hash256;
 import io.neow3j.types.NeoVMStateType;
-import io.neow3j.utils.Await;
 import org.slf4j.Logger;
 
 import java.io.File;
+
+import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
 
 final class ScriptUtils {
 
@@ -74,13 +75,12 @@ final class ScriptUtils {
         if (value.startsWith("N") && value.length() == 34) {
             return Hash160.fromAddress(value);
         }
-        String hex = value.startsWith("0x") || value.startsWith("0X") ? value.substring(2) : value;
-        return new Hash160(hex);
+        return new Hash160(value);
     }
 
     static void waitAndLogResult(Logger logger, Neow3j neow3j, Hash256 txHash, Hash160 contractHash, String operation) throws Exception {
         logger.info("Waiting for transaction confirmation...");
-        Await.waitUntilTransactionIsExecuted(txHash, neow3j);
+        waitUntilTransactionIsExecuted(txHash, neow3j);
 
         NeoApplicationLog appLog = neow3j.getApplicationLog(txHash).send().getApplicationLog();
         if (appLog != null && !appLog.getExecutions().isEmpty()) {

@@ -47,9 +47,9 @@ public class NeoFSFundProxy {
     /**
      * Fired at the end of a successful {@link #fundNeoFS} call.
      *
+     * @param requestId   The request ID returned by fundNeoFS
      * @param beneficiary The beneficiary address passed to fundNeoFS
      * @param amount      The amount of GAS (in fractions, 10^-8) that was transferred to NeoFS
-     * @param requestId   The request ID returned by fundNeoFS
      */
     @DisplayName("NeoFSFunded")
     @EventParameterNames({"requestId", "beneficiary", "amount"})
@@ -65,7 +65,10 @@ public class NeoFSFundProxy {
         public Hash160 neofsContract;
         public Hash160 messageBridge;
         public Hash160 executionManager;
-        /** EVM-side proxy contract address (20 bytes, same as Hash160). Required at deploy; owner may change it via {@link #setProxyOnEVM}. */
+        /**
+         * EVM-side proxy contract address (20 bytes, same as Hash160). Required at deploy; owner may change it via
+         * {@link #setNeoFSFundProxyOnEVM(Hash160)}.
+         */
         public Hash160 neoFSFundProxyOnEVM;
     }
 
@@ -378,7 +381,7 @@ public class NeoFSFundProxy {
     @OnNEP17Payment
     public static void onNep17Payment(Hash160 from, int amount, Object data) {
         // Only accept GAS token payments
-        if (!getCallingScriptHash().equals(new GasToken().getHash())) {
+        if (!getCallingScriptHash().equals(gasToken.getHash())) {
             abort("Only GAS token payments are accepted");
         }
         
