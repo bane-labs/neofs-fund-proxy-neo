@@ -70,13 +70,13 @@ public class SetEvmProxyContract {
         Hash160 evmProxyHash = parseHash160(evmProxyStr);
 
         TransactionBuilder builder = new SmartContract(contractHash, neow3j)
-                .invokeFunction("setEvmProxyContract", hash160(evmProxyHash))
+                .invokeFunction("setEvmProxy", hash160(evmProxyHash))
                 .signers(calledByEntry(account));
 
         if (dryRun) {
             logger.info("");
             logger.info("=== DRY RUN COMPLETE ===");
-            logger.info("Would call setEvmProxyContract({}) on contract {}", evmProxyStr, contractHashStr);
+            logger.info("Would call setEvmProxy({}) on contract {}", evmProxyStr, contractHashStr);
             return;
         }
 
