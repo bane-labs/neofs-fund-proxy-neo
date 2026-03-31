@@ -2,27 +2,37 @@ package axlabs.com.neofsfundproxy;
 
 import io.neow3j.contract.ContractManagement;
 import io.neow3j.contract.NefFile;
-import io.neow3j.contract.SmartContract;
 import io.neow3j.protocol.Neow3j;
 import io.neow3j.protocol.core.response.NeoApplicationLog;
 import io.neow3j.protocol.core.response.NeoSendRawTransaction;
 import io.neow3j.protocol.core.response.ContractManifest;
 import io.neow3j.protocol.http.HttpService;
-import io.neow3j.transaction.AccountSigner;
+import io.neow3j.transaction.Transaction;
 import io.neow3j.transaction.TransactionBuilder;
+import io.neow3j.types.ContractParameter;
 import io.neow3j.types.Hash160;
 import io.neow3j.types.Hash256;
 import io.neow3j.types.NeoVMStateType;
 import io.neow3j.wallet.Account;
 import io.neow3j.wallet.Wallet;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import io.github.cdimascio.dotenv.Dotenv;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+
+import static axlabs.com.neofsfundproxy.ScriptUtils.getConfig;
+import static axlabs.com.neofsfundproxy.ScriptUtils.isDryRun;
+import static axlabs.com.neofsfundproxy.ScriptUtils.loadDotenv;
+import static axlabs.com.neofsfundproxy.ScriptUtils.parseHash160;
+import static io.neow3j.contract.SmartContract.calcContractHash;
+import static io.neow3j.transaction.AccountSigner.global;
+import static io.neow3j.types.ContractParameter.array;
+import static io.neow3j.types.ContractParameter.hash160;
+import static io.neow3j.utils.Await.waitUntilTransactionIsExecuted;
+import static java.nio.file.Files.readAllBytes;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Deployment script for NeoFSFundProxy contract.
@@ -33,15 +43,17 @@ import java.nio.file.Paths;
  * 3. .env file in the project root
  *
  * Usage:
- *   ./gradlew deploy -Powner=<owner> -PneofsContract=<hash> -PmessageBridge=<hash> -PexecutionManager=<hash> [-PnativeBridge=<hash>] [-PevmProxyContract=<evm_20_byte_address>] [-PwalletPath=...] [-PwalletPassword=...] [-PrpcUrl=...] [-PdryRun=true]
+ *   ./gradlew deploy -Powner=<owner> -PneofsContract=<hash> -PmessageBridge=<hash> -PexecutionManager=<hash>
+ *       -PevmProxyContract=<evm_20_byte_address> [-PtokenBridge=<hash>] [-PwalletPath=...] [-PwalletPassword=...]
+ *       [-PrpcUrl=...] [-PdryRun=true]
  *
  * Or create a .env file with:
  *   N3_OWNER_ADDRESS=<owner_address>
  *   N3_NEOFS_CONTRACT=<neofs_contract_address>
  *   N3_MESSAGE_BRIDGE=<message_bridge_address>
  *   N3_EXECUTION_MANAGER=<execution_manager_contract_address>  # Required
- *   N3_NATIVE_BRIDGE=<native_bridge_address>  # Optional
- *   N3_EVM_PROXY_CONTRACT=<evm_proxy_20_byte_hex>  # Optional; can be set later via setEvmProxyContract
+ *   N3_TOKEN_BRIDGE=<token_bridge_address>  # Required
+ *   N3_EVM_PROXY_CONTRACT=<evm_proxy_20_byte_hex>  # Required (fundNeoFS checks message sender against this address)
  *   WALLET_FILEPATH_DEPLOYER=<wallet_path>
  *   WALLET_PASSWORD_DEPLOYER=<wallet_password>  # Optional
  *   N3_JSON_RPC=<rpc_url>  # Optional, defaults to http://localhost:40332
@@ -52,39 +64,19 @@ import java.nio.file.Paths;
  */
 public class DeployNeoFSFundProxy {
 
-    private static final Logger logger = LoggerFactory.getLogger(DeployNeoFSFundProxy.class);
+    private static final Logger logger = getLogger(DeployNeoFSFundProxy.class);
     private static final String DEFAULT_RPC_URL = "http://localhost:40332";
-    private static Dotenv dotenv = null;
 
     public static void main(String[] args) throws Throwable {
-        // Load .env file from current working directory (project root when run via Gradle with workingDir = projectDir)
-        try {
-            File envFile = new File(".env");
-            if (!envFile.isAbsolute()) {
-                String cwd = System.getProperty("user.dir");
-                envFile = new File(cwd, ".env");
-            }
-            if (envFile.exists()) {
-                dotenv = Dotenv.configure()
-                        .directory(envFile.getParentFile().getAbsolutePath())
-                        .filename(".env")
-                        .ignoreIfMissing()
-                        .load();
-                logger.info("Loaded configuration from .env file at {}", envFile.getAbsolutePath());
-            } else {
-                logger.debug(".env not found at {} (user.dir={})", envFile.getAbsolutePath(), System.getProperty("user.dir"));
-            }
-        } catch (Exception e) {
-            logger.warn("Could not load .env file: {}", e.getMessage());
-        }
+        loadDotenv(logger);
 
         // Get configuration from system properties, environment variables, or .env file
         String ownerAddress = getConfig("owner", "N3_OWNER_ADDRESS", true);
         String neofsContract = getConfig("neofsContract", "N3_NEOFS_CONTRACT", true);
         String messageBridge = getConfig("messageBridge", "N3_MESSAGE_BRIDGE", true);
         String executionManager = getConfig("executionManager", "N3_EXECUTION_MANAGER", true);
-        String nativeBridge = getConfig("nativeBridge", "N3_NATIVE_BRIDGE", false);
-        String evmProxyContract = getConfig("evmProxyContract", "N3_EVM_PROXY_CONTRACT", false);
+        String tokenBridge = getConfig("tokenBridge", "N3_TOKEN_BRIDGE", false);
+        String evmProxyContract = getConfig("evmProxyContract", "N3_EVM_PROXY_CONTRACT", true);
         String walletPath = getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
         String walletPassword = getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
         String rpcUrl = getConfig("rpcUrl", "N3_JSON_RPC", false);
@@ -92,9 +84,8 @@ public class DeployNeoFSFundProxy {
             rpcUrl = DEFAULT_RPC_URL;
         }
         String hashFile = getConfig("hashFile", "N3_HASH_FILE", false);
-        String dryRunStr = getConfig("dryRun", "DRY_RUN", false);
-        boolean dryRun = dryRunStr != null && (dryRunStr.equalsIgnoreCase("true") || dryRunStr.equals("1"));
 
+        boolean dryRun = isDryRun();
         if (dryRun) {
             logger.info("=== DRY RUN MODE - Transaction will NOT be submitted ===");
         }
@@ -104,12 +95,10 @@ public class DeployNeoFSFundProxy {
         logger.info("NeoFS Contract: {}", neofsContract);
         logger.info("Message Bridge: {}", messageBridge);
         logger.info("Execution Manager: {}", executionManager);
-        if (nativeBridge != null && !nativeBridge.isEmpty()) {
-            logger.info("Native Bridge: {}", nativeBridge);
+        if (tokenBridge != null && !tokenBridge.isEmpty()) {
+            logger.info("Token Bridge: {}", tokenBridge);
         }
-        if (evmProxyContract != null && !evmProxyContract.isEmpty()) {
-            logger.info("EVM Proxy Contract: {}", evmProxyContract);
-        }
+        logger.info("EVM Proxy Contract: {}", evmProxyContract);
 
         // Connect to Neo3 network
         Neow3j neow3j = Neow3j.build(new HttpService(rpcUrl));
@@ -132,7 +121,7 @@ public class DeployNeoFSFundProxy {
 
         NefFile nef = NefFile.readFromFile(nefFile);
         // Parse manifest using Jackson ObjectMapper from Wallet
-        String manifestJson = new String(Files.readAllBytes(manifestFile.toPath()));
+        String manifestJson = new String(readAllBytes(manifestFile.toPath()));
         ContractManifest manifest = Wallet.OBJECT_MAPPER.readValue(manifestJson, ContractManifest.class);
 
         // Parse addresses/hashes (both Neo3 address format and raw script hash are accepted)
@@ -140,23 +129,17 @@ public class DeployNeoFSFundProxy {
         Hash160 neofsContractHash = parseHash160(neofsContract);
         Hash160 messageBridgeHash = parseHash160(messageBridge);
         Hash160 executionManagerHash = parseHash160(executionManager);
-        Hash160 nativeBridgeHash = null;
-        if (nativeBridge != null && !nativeBridge.isEmpty()) {
-            nativeBridgeHash = parseHash160(nativeBridge);
-        }
-        Hash160 evmProxyContractHash = null;
-        if (evmProxyContract != null && !evmProxyContract.isEmpty()) {
-            evmProxyContractHash = parseHash160(evmProxyContract);
-        }
+        Hash160 tokenBridgeHash = parseHash160(tokenBridge);
+        Hash160 evmProxyContractHash = parseHash160(evmProxyContract);
 
-        // Create deployment data struct: owner, nativeBridge, neofsContract, messageBridge, executionManager, evmProxyContract
-        io.neow3j.types.ContractParameter deploymentData = io.neow3j.types.ContractParameter.array(
-                io.neow3j.types.ContractParameter.hash160(owner),
-                io.neow3j.types.ContractParameter.hash160(nativeBridgeHash != null ? nativeBridgeHash : Hash160.ZERO),
-                io.neow3j.types.ContractParameter.hash160(neofsContractHash),
-                io.neow3j.types.ContractParameter.hash160(messageBridgeHash),
-                io.neow3j.types.ContractParameter.hash160(executionManagerHash),
-                io.neow3j.types.ContractParameter.hash160(evmProxyContractHash != null ? evmProxyContractHash : Hash160.ZERO)
+        // Create deployment data struct: owner, tokenBridge, neofsContract, messageBridge, executionManager, evmProxyContract
+        ContractParameter deploymentData = array(
+                hash160(owner),
+                hash160(tokenBridgeHash),
+                hash160(neofsContractHash),
+                hash160(messageBridgeHash),
+                hash160(executionManagerHash),
+                hash160(evmProxyContractHash)
         );
 
         // Build deployment transaction using ContractManagement.
@@ -165,10 +148,10 @@ public class DeployNeoFSFundProxy {
         // deep from the entry script). calledByEntry would not cover that depth.
         TransactionBuilder builder = new ContractManagement(neow3j)
                 .deploy(nef, manifest, deploymentData)
-                .signers(AccountSigner.global(account));
+                .signers(global(account));
 
         // Calculate contract hash from sender, nef checksum, and manifest name
-        Hash160 contractHash = SmartContract.calcContractHash(
+        Hash160 contractHash = calcContractHash(
                 account.getScriptHash(),
                 nef.getCheckSumAsInteger(),
                 manifest.getName()
@@ -196,7 +179,7 @@ public class DeployNeoFSFundProxy {
 
         // Sign and send transaction
         logger.info("Signing and sending deployment transaction...");
-        io.neow3j.transaction.Transaction tx = builder.sign();
+        Transaction tx = builder.sign();
         NeoSendRawTransaction response = tx.send();
         if (response.hasError()) {
             throw new RuntimeException("Failed to send deployment transaction: " + response.getError().getMessage());
@@ -205,28 +188,8 @@ public class DeployNeoFSFundProxy {
         Hash256 txHash = tx.getTxId();
         logger.info("Deployment transaction sent: {}", txHash);
 
-        // Wait for transaction to be included in a block.
-        // getTransaction returns the TX from the mempool before it is mined, but
-        // getApplicationLog only works once the TX is in a confirmed block.
-        // We check getBlockHash() != null to ensure it has been mined.
         logger.info("Waiting for transaction confirmation...");
-        io.neow3j.protocol.core.response.Transaction confirmedTx = null;
-        int maxAttempts = 60;
-        for (int i = 0; i < maxAttempts; i++) {
-            Thread.sleep(1000);
-            io.neow3j.protocol.core.response.NeoGetTransaction txResponse =
-                    neow3j.getTransaction(txHash).send();
-            if (!txResponse.hasError() && txResponse.getTransaction() != null
-                    && txResponse.getTransaction().getBlockHash() != null) {
-                confirmedTx = txResponse.getTransaction();
-                logger.info("Transaction confirmed in block ({})", confirmedTx.getBlockHash());
-                break;
-            }
-        }
-
-        if (confirmedTx == null) {
-            throw new RuntimeException("Transaction not confirmed after waiting");
-        }
+        waitUntilTransactionIsExecuted(txHash, neow3j);
 
         // Get application log to check result and log details
         NeoApplicationLog appLog = neow3j.getApplicationLog(txHash).send().getApplicationLog();
@@ -262,48 +225,5 @@ public class DeployNeoFSFundProxy {
             Files.write(Paths.get(hashFile), contractHash.toString().getBytes());
             logger.info("Contract hash saved to: {}", hashFile);
         }
-    }
-
-    /**
-     * Parse a Hash160 from either a Neo3 address (e.g. "NXzij...") or a raw script hash
-     * hex string (e.g. "bd98300a..." or "0xbd98300a...").
-     */
-    private static Hash160 parseHash160(String value) {
-        if (value == null || value.isEmpty()) {
-            throw new IllegalArgumentException("Cannot parse empty hash/address");
-        }
-        // Neo3 addresses start with 'N' and are 34 characters long
-        if (value.startsWith("N") && value.length() == 34) {
-            return Hash160.fromAddress(value);
-        }
-        // Otherwise treat as a hex script hash (strip optional 0x prefix)
-        String hex = value.startsWith("0x") || value.startsWith("0X") ? value.substring(2) : value;
-        return new Hash160(hex);
-    }
-
-    /**
-     * Get configuration value from system properties, environment variables, or .env file.
-     * Priority: System property > Environment variable > .env file
-     */
-    private static String getConfig(String propertyName, String envName, boolean required) {
-        // First try system property
-        String value = System.getProperty(propertyName);
-
-        // Then try environment variable
-        if (value == null || value.isEmpty()) {
-            value = System.getenv(envName);
-        }
-
-        // Finally try .env file
-        if ((value == null || value.isEmpty()) && dotenv != null) {
-            value = dotenv.get(envName);
-        }
-
-        if (required && (value == null || value.isEmpty())) {
-            throw new IllegalArgumentException("Required parameter missing: " + propertyName +
-                    " (property), " + envName + " (environment variable), or in .env file");
-        }
-
-        return value;
     }
 }

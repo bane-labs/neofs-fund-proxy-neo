@@ -5,9 +5,11 @@ import io.neow3j.protocol.Neow3j;
 import io.neow3j.protocol.http.HttpService;
 import io.neow3j.types.Hash160;
 import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.io.File;
+import static axlabs.com.neofsfundproxy.ScriptUtils.getConfig;
+import static axlabs.com.neofsfundproxy.ScriptUtils.loadDotenv;
+import static axlabs.com.neofsfundproxy.ScriptUtils.parseHash160;
+import static org.slf4j.LoggerFactory.getLogger;
 
 /**
  * Script to invoke all getters on the deployed NeoFSFundProxy contract and print the results.
@@ -20,14 +22,14 @@ import java.io.File;
  */
 public class GetNeoFSFundProxyStatus {
 
-    private static final Logger logger = LoggerFactory.getLogger(GetNeoFSFundProxyStatus.class);
+    private static final Logger logger = getLogger(GetNeoFSFundProxyStatus.class);
     private static final String DEFAULT_RPC_URL = "http://localhost:40332";
 
     public static void main(String[] args) throws Throwable {
-        SetExecutionManager.loadDotenv();
+        loadDotenv(logger);
 
-        String contractHashStr = SetExecutionManager.getConfig("contractHash", "N3_CONTRACT_HASH", true);
-        String rpcUrl = SetExecutionManager.getConfig("rpcUrl", "N3_JSON_RPC", false);
+        String contractHashStr = getConfig("contractHash", "N3_CONTRACT_HASH", true);
+        String rpcUrl = getConfig("rpcUrl", "N3_JSON_RPC", false);
         if (rpcUrl == null || rpcUrl.isEmpty()) {
             rpcUrl = DEFAULT_RPC_URL;
         }
@@ -38,7 +40,7 @@ public class GetNeoFSFundProxyStatus {
         logger.info("");
 
         Neow3j neow3j = Neow3j.build(new HttpService(rpcUrl));
-        Hash160 contractHash = SetExecutionManager.parseHash160(contractHashStr);
+        Hash160 contractHash = parseHash160(contractHashStr);
         SmartContract contract = new SmartContract(contractHash, neow3j);
 
         // owner()

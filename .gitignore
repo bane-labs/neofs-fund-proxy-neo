@@ -19,6 +19,7 @@ contract.hash
 .settings/
 .classpath
 .project
+.java-version
 
 # OS
 .DS_Store

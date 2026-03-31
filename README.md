@@ -76,14 +76,15 @@ Compiled artifacts will be generated in `build/neow3j/`:
 
 The NeoFS fund proxy contract provides the following functionality:
 
-- **Claims native tokens** from the bridge using a nonce
+- **Claims the native representative tokens** from the token bridge using a nonce
 - **Transfers contract balance** to the NeoFS contract
 - **Accepts GAS token payments** via NEP-17 payment callback (payments are stored in contract balance for later transfer to NeoFS)
 
 #### Key Functions
 
-- `fundNeoFS(beneficiary, nonce, requestId)` - Claims native tokens from bridge using the provided nonce and transfers contract balance to NeoFS contract.
-- `setNativeBridge()` - Sets the native bridge contract address (owner only)
+- `fundNeoFS(beneficiary, nonce, requestId)` - Claims the native representative tokens (required to be GAS) from the token bridge using the 
+  provided nonce and transfers contract balance to NeoFS contract.
+- `setTokenBridge()` - Sets the token bridge contract address (owner only)
 - `setNeoFSContract()` - Sets the NeoFS contract address (owner only)
 - `getNeoFSContract()` - Gets the NeoFS contract address
 - `setOwner()` - Sets the contract owner (owner only)
@@ -146,8 +147,8 @@ N3_NEOFS_CONTRACT=NZNos2WqTbu5oCgyfss9kUJgBXJqhuYAaj
 # Required: Path to deployer wallet file
 WALLET_FILEPATH_DEPLOYER=wallets/deployer.json
 
-# Optional: Native bridge contract address
-N3_NATIVE_BRIDGE=NVTiAjNgagDkTr5oTzLfUz4Utf4XySHmPx
+# Optional: Token bridge contract address
+N3_TOKEN_BRIDGE=NVTiAjNgagDkTr5oTzLfUz4Utf4XySHmPx
 
 # Optional: Password for deployer wallet (leave empty if no password)
 WALLET_PASSWORD_DEPLOYER=
@@ -172,7 +173,7 @@ Then simply run:
 ./gradlew deploy \
   -Powner=<owner_address> \
   -PneofsContract=<neofs_contract_address> \
-  -PnativeBridge=<native_bridge_address> \
+  -PtokenBridge=<token_bridge_address> \
   -PwalletPath=<wallet_path> \
   -PwalletPassword=<wallet_password> \
   -PrpcUrl=<rpc_url> \
@@ -184,7 +185,7 @@ Example:
 ./gradlew deploy \
   -Powner=NRozNKnv4aSMEUL3KyD4UyeHoiPdLpi4y6 \
   -PneofsContract=NZNos2WqTbu5oCgyfss9kUJgBXJqhuYAaj \
-  -PnativeBridge=NVTiAjNgagDkTr5oTzLfUz4Utf4XySHmPx \
+  -PtokenBridge=NVTiAjNgagDkTr5oTzLfUz4Utf4XySHmPx \
   -PwalletPath=wallets/deployer.json \
   -PwalletPassword="" \
   -PrpcUrl=http://localhost:40332
@@ -197,7 +198,7 @@ Alternatively, you can use environment variables:
 ```bash
 export N3_OWNER_ADDRESS="NRozNKnv4aSMEUL3KyD4UyeHoiPdLpi4y6"
 export N3_NEOFS_CONTRACT="NZNos2WqTbu5oCgyfss9kUJgBXJqhuYAaj"
-export N3_NATIVE_BRIDGE="NVTiAjNgagDkTr5oTzLfUz4Utf4XySHmPx"  # Optional
+export N3_TOKEN_BRIDGE="NVTiAjNgagDkTr5oTzLfUz4Utf4XySHmPx"  # Optional
 export WALLET_FILEPATH_DEPLOYER="wallets/deployer.json"
 export WALLET_PASSWORD_DEPLOYER=""  # Optional, empty string if no password
 export N3_JSON_RPC="http://localhost:40332"  # Optional, defaults to http://localhost:40332
@@ -214,7 +215,7 @@ export N3_HASH_FILE="contract.hash"  # Optional, saves contract hash to file
 
 #### Optional Parameters
 
-- `nativeBridge` / `N3_NATIVE_BRIDGE` - Native bridge contract address (optional)
+- `tokenBridge` / `N3_TOKEN_BRIDGE` - Token bridge contract address (optional)
 - `walletPassword` / `WALLET_PASSWORD_DEPLOYER` - Password for deployer wallet (optional, empty string if no password)
 - `rpcUrl` / `N3_JSON_RPC` - Neo3 JSON-RPC endpoint URL (optional, defaults to http://localhost:40332)
 - `hashFile` / `N3_HASH_FILE` - Optional path to save contract hash
@@ -222,7 +223,7 @@ export N3_HASH_FILE="contract.hash"  # Optional, saves contract hash to file
 The deployment task will:
 1. Automatically compile the contract (runs `neow3jCompile` first)
 2. Load the compiled NEF and manifest files
-3. Create deployment data with owner, native bridge, and NeoFS contract
+3. Create deployment data with owner, token bridge, and NeoFS contract
 4. Deploy the contract to the Neo3 network
 5. Wait for transaction confirmation
 6. Display the contract hash and address
@@ -232,9 +233,9 @@ The deployment task will:
 
 After deployment, configure the contract if needed:
 
-1. **Set Native Bridge Address (if not set during deployment):**
+1. **Set Token Bridge Address (if not set during deployment):**
    ```bash
-   # Call setNativeBridge() method with the native bridge contract hash
+   # Call setTokenBridge() method with the token bridge contract hash
    ```
 
 2. **Set NeoFS Contract Address (if not set during deployment):**

@@ -12,4 +12,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'oracle-proxy-neo'
+rootProject.name = 'neofs-fund-proxy-neo'
