@@ -17,7 +17,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-// REVIEW
 
 /**
  * Script to set the EVM proxy contract address on the deployed NeoFSFundProxy contract.
@@ -35,17 +34,17 @@ public class SetEvmProxyContract {
     private static final String DEFAULT_RPC_URL = "http://localhost:40332";
 
     public static void main(String[] args) throws Throwable {
-        SetExecutionManager.loadDotenv();
+        ScriptUtils.loadDotenv(logger);
 
-        String contractHashStr = SetExecutionManager.getConfig("contractHash", "N3_CONTRACT_HASH", true);
-        String evmProxyStr = SetExecutionManager.getConfig("evmProxyContract", "N3_EVM_PROXY_CONTRACT", true);
-        String walletPath = SetExecutionManager.getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
-        String walletPassword = SetExecutionManager.getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
-        String rpcUrl = SetExecutionManager.getConfig("rpcUrl", "N3_JSON_RPC", false);
+        String contractHashStr = ScriptUtils.getConfig("contractHash", "N3_CONTRACT_HASH", true);
+        String evmProxyStr = ScriptUtils.getConfig("evmProxyContract", "N3_EVM_PROXY_CONTRACT", true);
+        String walletPath = ScriptUtils.getConfig("walletPath", "WALLET_FILEPATH_DEPLOYER", true);
+        String walletPassword = ScriptUtils.getConfig("walletPassword", "WALLET_PASSWORD_DEPLOYER", false);
+        String rpcUrl = ScriptUtils.getConfig("rpcUrl", "N3_JSON_RPC", false);
         if (rpcUrl == null || rpcUrl.isEmpty()) {
             rpcUrl = DEFAULT_RPC_URL;
         }
-        boolean dryRun = SetExecutionManager.isDryRun();
+        boolean dryRun = ScriptUtils.isDryRun();
 
         if (dryRun) {
             logger.info("=== DRY RUN MODE - Transaction will NOT be submitted ===");
@@ -62,8 +61,8 @@ public class SetEvmProxyContract {
         Account account = wallet.getDefaultAccount();
         logger.info("Owner account:      {}", account.getAddress());
 
-        Hash160 contractHash = SetExecutionManager.parseHash160(contractHashStr);
-        Hash160 evmProxyHash = SetExecutionManager.parseHash160(evmProxyStr);
+        Hash160 contractHash = ScriptUtils.parseHash160(contractHashStr);
+        Hash160 evmProxyHash = ScriptUtils.parseHash160(evmProxyStr);
 
         TransactionBuilder builder = new SmartContract(contractHash, neow3j)
                 .invokeFunction("setEvmProxyContract", ContractParameter.hash160(evmProxyHash))
@@ -85,6 +84,6 @@ public class SetEvmProxyContract {
 
         Hash256 txHash = tx.getTxId();
         logger.info("Transaction sent: {}", txHash);
-        SetExecutionManager.waitAndLogResult(neow3j, txHash, contractHash, "SET_EVM_PROXY_CONTRACT");
+        ScriptUtils.waitAndLogResult(logger, neow3j, txHash, contractHash, "SET_EVM_PROXY_CONTRACT");
     }
 }

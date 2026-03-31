@@ -23,7 +23,6 @@ import static io.neow3j.devpack.Helper.abort;
 import static io.neow3j.devpack.Runtime.checkWitness;
 import static io.neow3j.devpack.Runtime.getCallingScriptHash;
 import static io.neow3j.devpack.Runtime.getExecutingScriptHash;
-// REVIEW
 
 /**
  * NeoFS fund proxy contract for funding NeoFS via bridge.
@@ -35,12 +34,12 @@ import static io.neow3j.devpack.Runtime.getExecutingScriptHash;
 public class NeoFSFundProxy {
 
     private static final byte PREFIX_BASE = 0x0a;
-    private static final int KEY_NATIVE_BRIDGE = 0x02;
-    private static final int KEY_OWNER = 0x03;
-    private static final int KEY_NEOFS_CONTRACT = 0x04;
-    private static final int KEY_MESSAGE_BRIDGE = 0x05;
-    private static final int KEY_EXECUTION_MANAGER = 0x06;
-    private static final int KEY_EVM_PROXY_CONTRACT = 0x07;
+    private static final int KEY_OWNER = 0x01;
+    private static final int KEY_MESSAGE_BRIDGE = 0x02;
+    private static final int KEY_TOKEN_BRIDGE = 0x03;
+    private static final int KEY_EXECUTION_MANAGER = 0x04;
+    private static final int KEY_EVM_PROXY_CONTRACT = 0x05;
+    private static final int KEY_NEOFS_CONTRACT = 0x06;
 
     private static final StorageMap baseMap = new StorageMap(PREFIX_BASE);
 
@@ -63,7 +62,7 @@ public class NeoFSFundProxy {
     @Struct
     public static class DeploymentData {
         public Hash160 owner;
-        public Hash160 nativeBridge;
+        public Hash160 tokenBridge;
         public Hash160 neofsContract;
         public Hash160 messageBridge;
         public Hash160 executionManager;
@@ -99,14 +98,14 @@ public class NeoFSFundProxy {
      * the GAS amount transferred, and the request ID.
      *
      * @param beneficiary The beneficiary address forwarded as transfer data to the NeoFS contract
-     * @param nonce       The nonce for claiming from the native bridge
+     * @param nonce       The nonce for claiming from the token bridge
      * @param requestId   The request ID returned at the end of the call
      * @return The request ID
      */
     public static void fundNeoFS(
-            Hash160 beneficiary,
+            int requestId,
             int nonce,
-            int requestId
+            Hash160 beneficiary
     ) {
         // Only execution manager can call this function
         onlyExecutionManager();
@@ -114,19 +113,16 @@ public class NeoFSFundProxy {
         validateHash(beneficiary, "Invalid beneficiary");
 
         // Verify that the message was sent from the allowed EVM proxy contract.
-        // Use the executing nonce from the execution manager (message nonce), the arg nonce is only used with the native bridge
+        // Use the executing nonce from the execution manager (message nonce), the arg nonce is only used with the token bridge
         Hash160 evmProxy = baseMap.getHash160(KEY_EVM_PROXY_CONTRACT);
-        //validateHash(evmProxy, "EVM proxy bridge not set");
 
         Hash160 executionManagerHash = baseMap.getHash160(KEY_EXECUTION_MANAGER);
-        //validateHash(executionManagerHash, "Execution manager not set");
         int executingNonce = new ExecutionManagerInterface(executionManagerHash).getExecutingNonce();
         if (executingNonce == 0) {
             abort("No message is currently being executed");
         }
 
         Hash160 messageBridgeHash = baseMap.getHash160(KEY_MESSAGE_BRIDGE);
-        //validateHash(messageBridgeHash, "Message bridge not set");
 
         MessageBridgeInterface messageBridge = new MessageBridgeInterface(messageBridgeHash);
         MessageWithMetadata message = messageBridge.getMessage(executingNonce);
@@ -138,16 +134,15 @@ public class NeoFSFundProxy {
             abort("Message sender is not the allowed EVM proxy contract");
         }
 
-        // Claim native tokens from the bridge using the provided nonce
-        Hash160 bridgeHash = baseMap.getHash160(KEY_NATIVE_BRIDGE);
-        //validateHash(bridgeHash, "NeoFS contract address not set");
+        // Claim tokens from the token bridge using the provided nonce
+        Hash160 bridgeHash = baseMap.getHash160(KEY_TOKEN_BRIDGE);
 
+        // TODO, check if claimable when possible
         BridgeInterface bridge = new BridgeInterface(bridgeHash);
         bridge.claimNative(nonce);
 
         // Transfer full contract balance to the NeoFS contract stored in contract storage
         Hash160 neofsContract = baseMap.getHash160(KEY_NEOFS_CONTRACT);
-        //validateHash(neofsContract, "NeoFS contract address not set");
         
         Hash160 executingHash = getExecutingScriptHash();
         int balance = gasToken.balanceOf(executingHash);
@@ -174,16 +169,16 @@ public class NeoFSFundProxy {
 
     /**
      * Deploy function called automatically when contract is deployed.
-     * Sets the owner, native bridge, and NeoFS contract during initial deployment.
+     * Sets the owner, token bridge, and NeoFS contract during initial deployment.
      * 
-     * @param data Deployment data. Must be a {@link DeploymentData} struct with owner, nativeBridge,
+     * @param data Deployment data. Must be a {@link DeploymentData} struct with owner, tokenBridge,
      *             neofsContract, and messageBridge fields (in that order).
      * @param isUpdate Whether this is an update (true) or initial deployment (false)
      */
     @OnDeployment
     public static void deploy(Object data, boolean isUpdate) {
         if (!isUpdate) {
-            // On initial deployment, set owner, native bridge, and NeoFS contract from deployment data
+            // On initial deployment, set owner, token bridge, and NeoFS contract from deployment data
             if (data == null) {
                 abort("Invalid deployment data - DeploymentData struct required");
             }
@@ -193,9 +188,8 @@ public class NeoFSFundProxy {
             validateHash(deployData.owner, "Invalid owner");
             baseMap.put(KEY_OWNER, deployData.owner);
             
-            // Set native bridge if provided
-            validateHash(deployData.nativeBridge, "Invalid native bridge");
-            baseMap.put(KEY_NATIVE_BRIDGE, deployData.nativeBridge);
+            validateHash(deployData.tokenBridge, "Invalid token bridge");
+            baseMap.put(KEY_TOKEN_BRIDGE, deployData.tokenBridge);
             
             validateHash(deployData.neofsContract, "Invalid NeoFS contract");
             baseMap.put(KEY_NEOFS_CONTRACT, deployData.neofsContract);
@@ -206,7 +200,6 @@ public class NeoFSFundProxy {
             validateHash(deployData.executionManager, "Invalid execution manager");
             baseMap.put(KEY_EXECUTION_MANAGER, deployData.executionManager);
 
-            // Set EVM proxy contract address if provided (optional at deploy; can be set later via setEvmProxyContract)
             validateHash(deployData.evmProxyContract, "Invalid proxy contract");
             baseMap.put(KEY_EVM_PROXY_CONTRACT, deployData.evmProxyContract);
         }
@@ -221,7 +214,19 @@ public class NeoFSFundProxy {
     public static void setTokenBridge(Hash160 bridgeHash) {
         onlyOwner();
         validateHash(bridgeHash, "Invalid bridge hash");
-        baseMap.put(KEY_NATIVE_BRIDGE, bridgeHash);
+        baseMap.put(KEY_TOKEN_BRIDGE, bridgeHash);
+    }
+
+    /**
+     * Sets the execution manager contract address.
+     * Only the owner can call this method.
+     * 
+     * @param executionManagerHash The execution manager contract hash
+     */
+    public static void setExecutionManager(Hash160 executionManagerHash) {
+        onlyOwner();
+        validateHash(executionManagerHash, "Invalid execution manager hash");
+        baseMap.put(KEY_EXECUTION_MANAGER, executionManagerHash);
     }
 
     /**
@@ -234,6 +239,19 @@ public class NeoFSFundProxy {
         onlyOwner();
         validateHash(neofsContractHash, "Invalid NeoFS contract hash");
         baseMap.put(KEY_NEOFS_CONTRACT, neofsContractHash);
+    }
+
+    /**
+     * Sets the EVM-side proxy contract address (20-byte address as Hash160).
+     * Only the owner can call this method.
+     * FundNeoFS will only accept messages whose metadata sender equals this address.
+     *
+     * @param evmProxyContractHash The EVM proxy contract address (Hash160, 20 bytes)
+     */
+    public static void setEvmProxyContract(Hash160 evmProxyContractHash) {
+        onlyOwner();
+        validateHash(evmProxyContractHash, "Invalid EVM proxy contract hash");
+        baseMap.put(KEY_EVM_PROXY_CONTRACT, evmProxyContractHash);
     }
 
     /**
@@ -259,6 +277,16 @@ public class NeoFSFundProxy {
     }
 
     /**
+     * Gets the execution manager contract address.
+     * 
+     * @return The execution manager contract hash
+     */
+    @Safe
+    public static Hash160 getExecutionManager() {
+        return baseMap.getHash160(KEY_EXECUTION_MANAGER);
+    }
+
+    /**
      * Gets the message bridge contract address.
      * 
      * @return The message bridge contract hash
@@ -266,19 +294,6 @@ public class NeoFSFundProxy {
     @Safe
     public static Hash160 getMessageBridge() {
         return baseMap.getHash160(KEY_MESSAGE_BRIDGE);
-    }
-
-    /**
-     * Sets the EVM-side proxy contract address (20-byte address as Hash160).
-     * Only the owner can call this method.
-     * When set, fundNeoFS will only accept messages whose metadata sender equals this address.
-     *
-     * @param evmProxyContractHash The EVM proxy contract address (Hash160, 20 bytes)
-     */
-    public static void setEvmProxyContract(Hash160 evmProxyContractHash) {
-        onlyOwner();
-	validateHash(evmProxyContractHash, "Invalid proxy contract hash")
-        baseMap.put(KEY_EVM_PROXY_CONTRACT, evmProxyContractHash);
     }
 
     /**
@@ -357,20 +372,6 @@ public class NeoFSFundProxy {
     }
 
     /**
-     * Sets the execution manager contract address.
-     * Only the owner can call this method.
-     * 
-     * @param executionManagerHash The execution manager contract hash
-     */
-    public static void setExecutionManager(Hash160 executionManagerHash) {
-        onlyOwner();
-        if (executionManagerHash == null || !Hash160.isValid(executionManagerHash) || executionManagerHash.isZero()) {
-            abort("Invalid execution manager hash");
-        }
-        baseMap.put(KEY_EXECUTION_MANAGER, executionManagerHash);
-    }
-
-    /**
      * NEP-17 payment callback.
      * This contract accepts only GAS token payments.
      * 
@@ -407,7 +408,7 @@ public class NeoFSFundProxy {
             super(contractHash);
         }
 
-        @CallFlags(io.neow3j.devpack.constants.CallFlags.ReadStates)
+        @CallFlags(io.neow3j.devpack.constants.CallFlags.ReadOnly)
         public native int getExecutingNonce();
     }
 

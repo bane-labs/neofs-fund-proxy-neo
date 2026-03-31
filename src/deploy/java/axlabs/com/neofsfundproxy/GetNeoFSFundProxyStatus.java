@@ -8,7 +8,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-// REVIEW
 
 /**
  * Script to invoke all getters on the deployed NeoFSFundProxy contract and print the results.
@@ -25,10 +24,10 @@ public class GetNeoFSFundProxyStatus {
     private static final String DEFAULT_RPC_URL = "http://localhost:40332";
 
     public static void main(String[] args) throws Throwable {
-        SetExecutionManager.loadDotenv();
+        ScriptUtils.loadDotenv(logger);
 
-        String contractHashStr = SetExecutionManager.getConfig("contractHash", "N3_CONTRACT_HASH", true);
-        String rpcUrl = SetExecutionManager.getConfig("rpcUrl", "N3_JSON_RPC", false);
+        String contractHashStr = ScriptUtils.getConfig("contractHash", "N3_CONTRACT_HASH", true);
+        String rpcUrl = ScriptUtils.getConfig("rpcUrl", "N3_JSON_RPC", false);
         if (rpcUrl == null || rpcUrl.isEmpty()) {
             rpcUrl = DEFAULT_RPC_URL;
         }
@@ -39,7 +38,7 @@ public class GetNeoFSFundProxyStatus {
         logger.info("");
 
         Neow3j neow3j = Neow3j.build(new HttpService(rpcUrl));
-        Hash160 contractHash = SetExecutionManager.parseHash160(contractHashStr);
+        Hash160 contractHash = ScriptUtils.parseHash160(contractHashStr);
         SmartContract contract = new SmartContract(contractHash, neow3j);
 
         // owner()

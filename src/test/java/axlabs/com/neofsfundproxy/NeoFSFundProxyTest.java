@@ -31,7 +31,6 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-// REVIEW
 
 /**
  * Basic unit tests for NeoFSFundProxy contract.
@@ -110,30 +109,22 @@ public class NeoFSFundProxyTest {
 
     @DeployConfig(axlabs.com.neofsfundproxy.testhelper.DummyExecutionManagerContract.class)
     public static DeployConfiguration deployConfigDummyExecutionManager() throws Exception {
-        DeployConfiguration config = new DeployConfiguration();
-        config.setSigner(AccountSigner.none(ext.getAccount(OWNER_ADDRESS)));
-        return config;
+        return new DeployConfiguration();
     }
 
     @DeployConfig(axlabs.com.neofsfundproxy.testhelper.DummyMessageBridgeContract.class)
     public static DeployConfiguration deployConfigDummyMessageBridge() throws Exception {
-        DeployConfiguration config = new DeployConfiguration();
-        config.setSigner(AccountSigner.none(ext.getAccount(OWNER_ADDRESS)));
-        return config;
+        return new DeployConfiguration();
     }
 
     @DeployConfig(axlabs.com.neofsfundproxy.testhelper.DummyNativeBridgeContract.class)
     public static DeployConfiguration deployConfigDummyNativeBridge() throws Exception {
-        DeployConfiguration config = new DeployConfiguration();
-        config.setSigner(AccountSigner.none(ext.getAccount(OWNER_ADDRESS)));
-        return config;
+        return new DeployConfiguration();
     }
 
     @DeployConfig(axlabs.com.neofsfundproxy.testhelper.DummyNeoFSContract.class)
     public static DeployConfiguration deployConfigDummyNeoFS() throws Exception {
-        DeployConfiguration config = new DeployConfiguration();
-        config.setSigner(AccountSigner.none(ext.getAccount(OWNER_ADDRESS)));
-        return config;
+        return new DeployConfiguration();
     }
 
     // --- Tests ---
