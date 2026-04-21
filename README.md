@@ -233,6 +233,11 @@ The deployment task will:
 
 After deployment, configure the contract if needed:
 
+### Deployed Contract Address
+
+- Testnet: `20b0751a2a82a44ef33c6237689db2dcdb26b562`
+- Mainnet: `20b0751a2a82a44ef33c6237689db2dcdb26b562`
+
 1. **Set Token Bridge Address (if not set during deployment):**
    ```bash
    # Call setTokenBridge() method with the token bridge contract hash

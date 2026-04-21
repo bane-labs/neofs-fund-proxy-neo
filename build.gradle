@@ -107,6 +107,19 @@ task upgrade(type: JavaExec) {
     environment System.getenv()
 }
 
+// Transfer contract ownership (current owner + new owner must sign; see SetOwner.java)
+task setOwner(type: JavaExec) {
+    description = 'Set NeoFSFundProxy owner: wallet (-PwalletPath, -PnewOwner) or WIF (-PownerWif, -PnewOwnerWif); env N3_* equivalents'
+    group = 'deployment'
+
+    workingDir = project.projectDir
+    classpath = sourceSets.deploy.runtimeClasspath
+    mainClass = 'axlabs.com.neofsfundproxy.SetOwner'
+
+    systemProperties System.getProperties()
+    environment System.getenv()
+}
+
 // Set execution manager on the deployed NeoFSFundProxy (owner only)
 task setExecutionManager(type: JavaExec) {
     description = 'Set execution manager on deployed NeoFSFundProxy (-PcontractHash=<hash> -PexecutionManager=<hash> -PwalletPath=...)'
@@ -141,6 +154,18 @@ task getNeoFSFundProxyStatus(type: JavaExec) {
     workingDir = project.projectDir
     classpath = sourceSets.deploy.runtimeClasspath
     mainClass = 'axlabs.com.neofsfundproxy.GetNeoFSFundProxyStatus'
+
+    systemProperties System.getProperties()
+    environment System.getenv()
+}
+
+task getConfig(type: JavaExec) {
+    description = 'Print NeoFSFundProxy configuration (read-only invocations; -PcontractHash=<hash> or N3_CONTRACT_HASH in .env)'
+    group = 'deployment'
+
+    workingDir = project.projectDir
+    classpath = sourceSets.deploy.runtimeClasspath
+    mainClass = 'axlabs.com.neofsfundproxy.GetConfig'
 
     systemProperties System.getProperties()
     environment System.getenv()

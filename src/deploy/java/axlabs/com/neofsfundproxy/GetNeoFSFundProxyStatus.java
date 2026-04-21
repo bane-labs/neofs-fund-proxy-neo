@@ -52,8 +52,8 @@ public class GetNeoFSFundProxyStatus {
         // getMessageBridge()
         printGetter("getMessageBridge", () -> formatHash160(contract.callFunctionReturningScriptHash("getMessageBridge")));
 
-        // getEvmProxyContract()
-        printGetter("getEvmProxyContract", () -> formatHash160(contract.callFunctionReturningScriptHash("getEvmProxyContract")));
+        // getEvmProxy()
+        printGetter("getEvmProxy", () -> formatHash160(contract.callFunctionReturningScriptHash("getEvmProxy")));
 
         logger.info("=== End ===");
     }
