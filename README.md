@@ -101,7 +101,7 @@ Library for encoding data in EVM ABI format. Provides functions to serialize dat
 ## Configuration
 
 The `build.gradle` file configures:
-- neow3j compiler plugin (version 3.24.0)
+- neow3j compiler plugin (version 3.24.2)
 - Main contract class: `axlabs.com.neofsfundproxy.NeoFSFundProxy`
 - Java source compatibility: 1.8
 - Group: `axlabs.com.neofsfundproxy`
@@ -256,9 +256,9 @@ After deployment, configure the contract if needed:
 
 ## Dependencies
 
-- `io.neow3j:devpack:3.24.0` - Neo3 smart contract development pack
-- `io.neow3j:compiler:3.24.0` - Neo3 compiler (for deployment tools)
-- `io.neow3j:contract:3.24.0` - Neo3 contract utilities (for deployment tools)
+- `io.neow3j:devpack:3.24.2` - Neo3 smart contract development pack
+- `io.neow3j:compiler:3.24.2` - Neo3 compiler (for deployment tools)
+- `io.neow3j:contract:3.24.2` - Neo3 contract utilities (for deployment tools)
 
 ## Testing
 

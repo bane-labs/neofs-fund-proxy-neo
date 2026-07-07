@@ -44,7 +44,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 /**
  * Basic unit tests for NeoFSFundProxy contract.
- * Uses neow3j 3.24.2-SNAPSHOT and ContractTest framework.
  */
 @ContractTest(
         blockTime = 1,
